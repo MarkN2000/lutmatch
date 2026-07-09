@@ -17,13 +17,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **LUT Match** — 元画像（Source）と参考画像（Reference）の2枚から、色を近づける 3D LUT を自動生成し `.cube` として書き出すWebアプリ。完全ブラウザ内処理（サーバー送信なし）。
 
-**現状はまだ実装前**：リポジトリには仕様書 `spec.md` のみが存在する。実装に関するすべての判断は `spec.md` を唯一の情報源とすること。仕様と実装が食い違う場合は仕様を確認し、仕様変更が必要なら `spec.md` の決定事項ログ（§13）を更新する。
+**現状は実装済み・リリース前**：`src/` に全機能（コア・Worker・WebGL プレビュー・UI・i18n）、`tests/` に vitest テスト、`.github/workflows/ci.yml` に CI が揃っている。実装に関するすべての判断は `spec.md` を唯一の情報源とすること。仕様と実装が食い違う場合は仕様を確認し、仕様変更が必要なら `spec.md` の決定事項ログ（§13）を更新する。
 
 ドキュメント・UI文言・コミュニケーションは日本語が基本（UIは日英 i18n あり）。
 
-## コマンド（予定スタック）
+## コマンド
 
-スタックは Vite + TypeScript（フレームワークなし・Vanilla TS）、テストは vitest。`package.json` 作成後は以下が標準：
+スタックは Vite + TypeScript（フレームワークなし・Vanilla TS）、テストは vitest：
 
 - 開発サーバー: `npm run dev`
 - ビルド: `npm run build`（`vite build` → `dist/`、Cloudflare Pages にデプロイ）
