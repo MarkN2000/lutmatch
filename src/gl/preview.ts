@@ -48,6 +48,9 @@ export type RenderQuality = 'draft' | 'full';
 /** バックエンド切替の通知コールバック。 */
 export type BackendChangeCallback = (backend: PreviewBackend) => void;
 
+/** コンテキストロスト後 restore を待つ猶予（ms）。超過で Canvas2D へフォールバックする。 */
+const CONTEXT_RESTORE_TIMEOUT_MS = 3000;
+
 /** プレビューレンダラーの公開 API。 */
 export interface PreviewRenderer {
   /** 元画像を差し替える（既存 ImageBitmap の close は呼び出し側の責務）。 */
@@ -172,7 +175,8 @@ export function createPreviewRenderer(canvas: HTMLCanvasElement): PreviewRendere
 }
 
 class PreviewRendererImpl implements PreviewRenderer {
-  private readonly canvas: HTMLCanvasElement;
+  // フォールバック時に DOM 上で差し替えるため readonly にはしない。
+  private canvas: HTMLCanvasElement;
   private readonly state: PreviewState = {
     image: null,
     lut: null,
@@ -201,11 +205,22 @@ class PreviewRendererImpl implements PreviewRenderer {
   private imageTex: WebGLTexture | null = null;
   private lutTex: WebGLTexture | null = null;
   private contextLost = false;
+  private restoreWatchdog: ReturnType<typeof setTimeout> | null = null;
   private readonly onLost = (e: Event): void => {
     e.preventDefault();
     this.contextLost = true;
+    // restore が来ないまま凍結するのを防ぐ：猶予超過で Canvas2D へフォールバックする。
+    if (this.restoreWatchdog == null) {
+      this.restoreWatchdog = setTimeout(() => {
+        this.restoreWatchdog = null;
+        if (!this.disposed && this.contextLost && this.backendKind === 'webgl2') {
+          this.switchToCanvas2D();
+        }
+      }, CONTEXT_RESTORE_TIMEOUT_MS);
+    }
   };
   private readonly onRestored = (): void => {
+    this.clearRestoreWatchdog();
     try {
       this.initWebGL();
       this.contextLost = false;
@@ -214,6 +229,13 @@ class PreviewRendererImpl implements PreviewRenderer {
       this.switchToCanvas2D();
     }
   };
+
+  private clearRestoreWatchdog(): void {
+    if (this.restoreWatchdog != null) {
+      clearTimeout(this.restoreWatchdog);
+      this.restoreWatchdog = null;
+    }
+  }
 
   // ---- Canvas 2D フォールバックのリソース／キャッシュ ----
   private ctx2d: CanvasRenderingContext2D | null = null;
@@ -315,6 +337,7 @@ class PreviewRendererImpl implements PreviewRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.clearRestoreWatchdog();
     this.canvas.removeEventListener('webglcontextlost', this.onLost, false);
     this.canvas.removeEventListener('webglcontextrestored', this.onRestored, false);
     this.destroyWebGL();
@@ -484,10 +507,35 @@ class PreviewRendererImpl implements PreviewRenderer {
 
   // ================= Canvas 2D フォールバック =================
 
+  /**
+   * canvas 要素を新規作成し、DOM 上の同じ位置で旧要素と差し替える。
+   * className・属性・バッキングストアサイズを引き継ぎ、WebGL 用イベント
+   * リスナーは旧要素から外す（Canvas2D では発火しないため張り直さない）。
+   */
+  private replaceCanvasElement(): void {
+    const old = this.canvas;
+    old.removeEventListener('webglcontextlost', this.onLost, false);
+    old.removeEventListener('webglcontextrestored', this.onRestored, false);
+
+    const next = document.createElement('canvas');
+    for (const name of old.getAttributeNames()) {
+      const value = old.getAttribute(name);
+      if (value != null) next.setAttribute(name, value);
+    }
+    next.width = old.width;
+    next.height = old.height;
+    old.parentNode?.replaceChild(next, old);
+    this.canvas = next;
+  }
+
   private switchToCanvas2D(): void {
     if (this.backendKind === 'canvas2d') return;
+    this.clearRestoreWatchdog();
     this.destroyWebGL();
     this.backendKind = 'canvas2d';
+    // 一度 webgl2 コンテキストを確立した canvas への getContext('2d') は
+    // ブラウザ仕様上 null を返すため、canvas 要素ごと差し替える。
+    this.replaceCanvasElement();
     const ctx = this.canvas.getContext('2d', { alpha: false });
     this.ctx2d = ctx;
     const src = document.createElement('canvas');
