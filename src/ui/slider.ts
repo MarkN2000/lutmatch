@@ -110,16 +110,22 @@ export function createSlider(config: SliderConfig): SliderHandle {
     input.focus();
     input.select();
 
-    const finish = (accept: boolean): void => {
+    let finished = false;
+    const finish = (accept: boolean, restoreFocus: boolean): void => {
+      if (finished) return;
+      finished = true;
       if (accept && input.value !== '') commitValue(Number(input.value));
       clear(head);
       append(head, label, valueBtn);
       refreshText();
+      // Enter/Escape による確定時のみフォーカスを値ボタンへ戻す。
+      // blur（別要素クリック等）ではユーザーの操作先を優先し、フォーカスを奪わない。
+      if (restoreFocus) valueBtn.focus();
     };
-    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('blur', () => finish(true, false));
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') finish(true);
-      else if (e.key === 'Escape') finish(false);
+      if (e.key === 'Enter') finish(true, true);
+      else if (e.key === 'Escape') finish(false, true);
     });
   });
 

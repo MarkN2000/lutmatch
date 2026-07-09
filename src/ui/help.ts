@@ -81,10 +81,23 @@ export function createHelpModal(): HelpModalHandle {
     rangeBody.textContent = t('helpRangeBody');
   };
 
+  let lastFocused: HTMLElement | null = null;
+
+  const getFocusable = (): HTMLElement[] =>
+    Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((elm) => elm.offsetParent !== null);
+
   const close = (): void => {
     overlay.hidden = true;
+    const toFocus = lastFocused;
+    lastFocused = null;
+    toFocus?.focus();
   };
   const open = (): void => {
+    lastFocused = document.activeElement as HTMLElement | null;
     overlay.hidden = false;
     okBtn.focus();
   };
@@ -95,7 +108,26 @@ export function createHelpModal(): HelpModalHandle {
     if (e.target === overlay) close();
   });
   document.addEventListener('keydown', (e) => {
-    if (!overlay.hidden && e.key === 'Escape') close();
+    if (overlay.hidden) return;
+    if (e.key === 'Escape') {
+      close();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = getFocusable();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !dialog.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !dialog.contains(active)) {
+      e.preventDefault();
+      first.focus();
+    }
   });
 
   onLangChange(refreshText);

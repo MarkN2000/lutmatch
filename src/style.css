@@ -193,6 +193,7 @@ body {
     max-height: 40dvh;
   }
   .block-preview .preview__stage {
+    min-height: 0;
     max-height: calc(40dvh - 44px);
   }
   .block-exportbar {
@@ -274,11 +275,11 @@ body {
 }
 .dropzone__hint {
   font-size: 12px;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .dropzone__formats {
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .dropzone__thumb {
   max-width: 100%;
@@ -342,7 +343,7 @@ body {
   border: 0;
   border-radius: 7px;
   padding: 8px 4px;
-  min-height: 40px;
+  min-height: var(--tap);
   cursor: pointer;
 }
 .segment__btn.is-active {
@@ -464,7 +465,7 @@ body {
   border: 0;
   border-radius: 7px;
   padding: 8px 14px;
-  min-height: 40px;
+  min-height: var(--tap);
   cursor: pointer;
 }
 .preview__tab.is-active {
@@ -608,7 +609,7 @@ body {
   justify-content: center;
   padding: 20px;
   text-align: center;
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: 13px;
 }
 
@@ -634,8 +635,8 @@ body {
   background: var(--bg-elev2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: var(--tap);
+  min-height: var(--tap);
   cursor: pointer;
 }
 .exportbar__options {
@@ -660,8 +661,8 @@ body {
   background: var(--bg-elev2);
   border: 1px solid var(--border);
   border-radius: 7px;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: var(--tap);
+  min-height: var(--tap);
   padding: 0 8px;
   cursor: pointer;
 }
@@ -690,7 +691,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 8px 10px;
-  min-height: 40px;
+  min-height: var(--tap);
 }
 .exportbar__actions {
   display: flex;

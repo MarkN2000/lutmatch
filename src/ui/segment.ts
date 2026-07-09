@@ -48,6 +48,18 @@ export function createModeSegment(
     }
   };
 
+  const select = (index: number): void => {
+    const opt = OPTIONS[index];
+    const btn = buttons.get(opt.value);
+    if (!btn) return;
+    if (value !== opt.value) {
+      value = opt.value;
+      sync();
+      onChange(value);
+    }
+    btn.focus();
+  };
+
   for (const opt of OPTIONS) {
     const btn = el('button', 'segment__btn');
     btn.type = 'button';
@@ -57,6 +69,30 @@ export function createModeSegment(
       value = opt.value;
       sync();
       onChange(value);
+    });
+    btn.addEventListener('keydown', (e) => {
+      const idx = OPTIONS.findIndex((o) => o.value === opt.value);
+      let nextIdx: number;
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          nextIdx = (idx - 1 + OPTIONS.length) % OPTIONS.length;
+          break;
+        case 'ArrowRight':
+        case 'ArrowDown':
+          nextIdx = (idx + 1) % OPTIONS.length;
+          break;
+        case 'Home':
+          nextIdx = 0;
+          break;
+        case 'End':
+          nextIdx = OPTIONS.length - 1;
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+      select(nextIdx);
     });
     buttons.set(opt.value, btn);
     append(root, btn);
