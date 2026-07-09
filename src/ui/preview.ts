@@ -5,10 +5,8 @@
  * - 表示タブ（元画像 / 適用後 / 比較〔既定〕）
  * - 比較スライダー（デスクトップ＝どこでもドラッグ＋ハンドル、モバイル＝ハンドルのみ、←→キー）
  * - 参考画像サムネイル小窓（タップで一時拡大）
- * - ズーム/パン（ダブルタップ・ホイールで 100%⇄フィット、ピンチ、ドラッグパン）
+ * - 画像は常にステージへフィット表示（拡大縮小・パン操作はなし）
  * - 計算中スケルトン＋進捗、空状態ヒント
- *
- * `touch-action` 制限はステージ要素内のみ（CSS 側）。ページ全体のズームは阻害しない。
  */
 
 import { append, el, isCoarsePointer } from './dom.ts';
@@ -88,7 +86,6 @@ export function createPreview(): PreviewHandle {
   let referenceBitmap: ImageBitmap | null = null;
   let split = 0.5;
   let transform: ViewTransform = { scale: 1, offsetX: 0, offsetY: 0 };
-  let isFit = true;
 
   const stageSize = (): { w: number; h: number } => ({
     w: stage.clientWidth || 1,
@@ -100,11 +97,11 @@ export function createPreview(): PreviewHandle {
     renderer.render(quality);
   };
 
+  // 画像は常にステージへフィット表示する（拡大縮小・パンは行わない）。
   const fitToStage = (): void => {
     if (!sourceBitmap) return;
     const { w, h } = stageSize();
     transform = computeFitTransform(sourceBitmap.width, sourceBitmap.height, w, h);
-    isFit = true;
     applyTransform();
   };
 
@@ -192,131 +189,35 @@ export function createPreview(): PreviewHandle {
     }
   });
 
-  // ---- ステージのポインタ操作（パン / ピンチ / デスクトップの比較ドラッグ）----
-  const pointers = new Map<number, { x: number; y: number }>();
-  let panning = false;
-  let pinchStartDist = 0;
-  let pinchStartScale = 1;
+  // ---- ステージのポインタ操作（デスクトップの比較ドラッグ）----
+  // モバイル（coarse pointer）はハンドルドラッグのみで動作させる（縦スクロールとの競合回避）。
   let compareDragging = false;
-
-  const distance = (): number => {
-    const pts = [...pointers.values()];
-    if (pts.length < 2) return 0;
-    const dx = pts[0].x - pts[1].x;
-    const dy = pts[0].y - pts[1].y;
-    return Math.hypot(dx, dy);
-  };
-
-  const zoomAround = (px: number, py: number, newScale: number): void => {
-    const clamped = Math.min(16, Math.max(0.05, newScale));
-    const ratio = clamped / transform.scale;
-    transform = {
-      scale: clamped,
-      offsetX: px - (px - transform.offsetX) * ratio,
-      offsetY: py - (py - transform.offsetY) * ratio,
-    };
-    isFit = false;
-    applyTransform('draft');
-  };
 
   stage.addEventListener('pointerdown', (e) => {
     if (e.target === handle) return;
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (viewMode !== 'compare' || coarse) return;
+    compareDragging = true;
     stage.setPointerCapture(e.pointerId);
-
-    if (pointers.size === 2) {
-      pinchStartDist = distance();
-      pinchStartScale = transform.scale;
-      panning = false;
-      compareDragging = false;
-      return;
-    }
-    // 単一ポインタ：比較モードのデスクトップは split ドラッグ、それ以外はパン。
-    if (viewMode === 'compare' && !coarse) {
-      compareDragging = true;
-      setSplit(splitFromClientX(e.clientX), 'draft');
-    } else {
-      panning = true;
-    }
+    setSplit(splitFromClientX(e.clientX), 'draft');
   });
 
   stage.addEventListener('pointermove', (e) => {
-    const prev = pointers.get(e.pointerId);
-    if (!prev) return;
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (pointers.size === 2 && pinchStartDist > 0) {
-      const rect = stage.getBoundingClientRect();
-      const pts = [...pointers.values()];
-      const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
-      const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
-      zoomAround(midX, midY, (pinchStartScale * distance()) / pinchStartDist);
-      return;
-    }
-    if (compareDragging) {
-      setSplit(splitFromClientX(e.clientX), 'draft');
-      return;
-    }
-    if (panning) {
-      transform = {
-        ...transform,
-        offsetX: transform.offsetX + (e.clientX - prev.x),
-        offsetY: transform.offsetY + (e.clientY - prev.y),
-      };
-      isFit = false;
-      applyTransform('draft');
-    }
+    if (!compareDragging) return;
+    setSplit(splitFromClientX(e.clientX), 'draft');
   });
 
   const endStagePointer = (e: PointerEvent): void => {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.delete(e.pointerId);
+    if (!compareDragging) return;
+    compareDragging = false;
     try {
       stage.releasePointerCapture(e.pointerId);
     } catch {
       /* noop */
     }
-    if (pointers.size < 2) {
-      pinchStartDist = 0;
-    }
-    if (pointers.size === 0) {
-      if (compareDragging) setSplit(split, 'full');
-      else applyTransform('full');
-      panning = false;
-      compareDragging = false;
-    }
+    setSplit(split, 'full');
   };
   stage.addEventListener('pointerup', endStagePointer);
   stage.addEventListener('pointercancel', endStagePointer);
-
-  // ホイールズーム。
-  stage.addEventListener(
-    'wheel',
-    (e) => {
-      if (!sourceBitmap) return;
-      e.preventDefault();
-      const rect = stage.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      const factor = Math.exp(-e.deltaY * 0.0015);
-      zoomAround(px, py, transform.scale * factor);
-    },
-    { passive: false },
-  );
-
-  // ダブルクリック / ダブルタップで 100%⇄フィット。
-  stage.addEventListener('dblclick', (e) => {
-    if (!sourceBitmap) return;
-    e.preventDefault();
-    if (isFit) {
-      // 100%：ダブルクリック位置を中心に等倍化。
-      const rect = stage.getBoundingClientRect();
-      zoomAround(e.clientX - rect.left, e.clientY - rect.top, 1);
-      applyTransform('full');
-    } else {
-      fitToStage();
-    }
-  });
 
   // ---- 参考サムネイル ----
   refThumb.addEventListener('click', () => refThumb.classList.toggle('is-expanded'));
@@ -379,8 +280,7 @@ export function createPreview(): PreviewHandle {
     },
     resize(): void {
       renderer.resize();
-      if (isFit) fitToStage();
-      else applyTransform('full');
+      fitToStage();
     },
     setComputing(computing, ratio = 0): void {
       overlay.hidden = !computing;

@@ -66,7 +66,6 @@ export const en: Record<MessageKey, string> = {
   previewEmpty: 'Choose images to see the preview here',
   computing: 'Computing…',
   compareHandleAria: 'Compare slider (use arrow keys)',
-  zoomFitAria: 'Zoom: toggle fit / 100%',
 
   // ---- Export ----
   exportSizeLabel: 'Size',

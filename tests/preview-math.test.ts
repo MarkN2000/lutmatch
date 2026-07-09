@@ -4,7 +4,6 @@ import {
   clampDevicePixelRatio,
   clampSplit,
   computeFitTransform,
-  computeHundredPercentTransform,
   DRAFT_LONG_EDGE,
   lutHalfTexel,
   workingSize,
@@ -55,15 +54,6 @@ describe('computeFitTransform', () => {
   });
   it('不正サイズは恒等変換', () => {
     expect(computeFitTransform(0, 100, 100, 100)).toEqual({ scale: 1, offsetX: 0, offsetY: 0 });
-  });
-});
-
-describe('computeHundredPercentTransform', () => {
-  it('scale=1・画像中央配置', () => {
-    const t = computeHundredPercentTransform(100, 100, 400, 300);
-    expect(t.scale).toBe(1);
-    expect(t.offsetX).toBe(150);
-    expect(t.offsetY).toBe(100);
   });
 });
 

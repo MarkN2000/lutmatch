@@ -65,7 +65,6 @@ export const ja = {
   previewEmpty: '画像を選ぶとここにプレビューが表示されます',
   computing: '計算中…',
   compareHandleAria: '比較スライダー（左右キーで移動）',
-  zoomFitAria: 'ズーム：フィット / 100% を切り替え',
 
   // ---- 書き出し（§4.6）----
   exportSizeLabel: 'サイズ',

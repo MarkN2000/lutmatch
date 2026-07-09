@@ -80,22 +80,6 @@ export function computeFitTransform(
   };
 }
 
-/**
- * 100%（等倍）表示のビュー変換（画像をビュー中央に置く）。
- */
-export function computeHundredPercentTransform(
-  imageW: number,
-  imageH: number,
-  viewW: number,
-  viewH: number,
-): ViewTransform {
-  return {
-    scale: 1,
-    offsetX: (viewW - imageW) / 2,
-    offsetY: (viewH - imageH) / 2,
-  };
-}
-
 /** ピクセルサイズ（幅・高さ）。 */
 export interface PixelSize {
   w: number;

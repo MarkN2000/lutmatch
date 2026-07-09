@@ -532,8 +532,6 @@ body {
   min-height: 240px;
   background: #0e0f11;
   overflow: hidden;
-  /* カスタムズーム/パンのためのタッチ制御はステージ内のみに限定（§6.3） */
-  touch-action: none;
 }
 .preview__canvas {
   display: block;
