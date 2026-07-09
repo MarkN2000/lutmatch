@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:samples": "node scripts/gen-samples.mjs"
   },
   "devDependencies": {
     "vite": "^8.1.4",
