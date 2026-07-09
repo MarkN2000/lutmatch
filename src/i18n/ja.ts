@@ -95,7 +95,6 @@ export const ja = {
     'LUT は「色の置き換え」だけを行います。粒状感（グレイン）・ボケ・ビネットなど空間的な効果は再現できません。被写体が近い 2 枚ほど良い結果になります。',
   helpClose: '閉じる',
 
-  // 初回ヒント（§6.4）
+  // ヒント（§6.4）
   firstHint: 'ヒント：Source と Reference の被写体が近いほど、自然で良い結果になります。',
-  firstHintDismiss: '了解',
 } as const;

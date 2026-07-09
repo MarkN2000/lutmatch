@@ -48,7 +48,6 @@ const DEFAULTS: Record<string, number> = {
 
 const ALPHA_THRESHOLD = 0.5;
 const RECOMPUTE_DEBOUNCE_MS = 100;
-const HINT_STORAGE_KEY = 'lutmatch.hintSeen';
 
 // ============================================================
 // アプリ状態
@@ -112,17 +111,10 @@ const sampleBtn = el('button', 'btn btn--ghost sample-btn');
 sampleBtn.type = 'button';
 sampleBtn.addEventListener('click', () => void loadSamples());
 
-// 初回ヒント（§6.4）。
+// ヒント（§6.4）。常時表示。
 const hintBanner = el('div', 'hint');
 const hintText = el('span', 'hint__text');
-const hintDismiss = el('button', 'hint__dismiss');
-hintDismiss.type = 'button';
-append(hintBanner, hintText, hintDismiss);
-hintBanner.hidden = hintAlreadySeen();
-hintDismiss.addEventListener('click', () => {
-  hintBanner.hidden = true;
-  markHintSeen();
-});
+append(hintBanner, hintText);
 
 append(inputsBlock, dzRow, sampleBtn, hintBanner);
 
@@ -223,7 +215,6 @@ function refreshStaticText(): void {
   sampleBtn.textContent = t('sampleButton');
   resetBtn.textContent = t('resetButton');
   hintText.textContent = t('firstHint');
-  hintDismiss.textContent = t('firstHintDismiss');
 }
 onLangChange(refreshStaticText);
 refreshStaticText();
@@ -482,25 +473,6 @@ function resetAdjustments(): void {
   blackSlider.setValue(DEFAULTS.blackProtection, true);
 
   scheduleRecompute();
-}
-
-// ============================================================
-// 初回ヒント（localStorage 保護）
-// ============================================================
-
-function hintAlreadySeen(): boolean {
-  try {
-    return localStorage.getItem(HINT_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-function markHintSeen(): void {
-  try {
-    localStorage.setItem(HINT_STORAGE_KEY, '1');
-  } catch {
-    /* 無視 */
-  }
 }
 
 // ============================================================

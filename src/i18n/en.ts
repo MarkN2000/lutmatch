@@ -97,5 +97,4 @@ export const en: Record<MessageKey, string> = {
   helpClose: 'Close',
 
   firstHint: 'Tip: the closer the subjects of Source and Reference, the more natural the result.',
-  firstHintDismiss: 'Got it',
 };
