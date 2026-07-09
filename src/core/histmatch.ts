@@ -96,18 +96,32 @@ function evalCdf(cdf: Float64Array, x: number): number {
   return cdf[i] + (cdf[i + 1] - cdf[i]) * f;
 }
 
-/** 逆 CDF：確率 p に対応する x（ガンマ空間 [0,1]）を分位点線形補間で求める。 */
+/**
+ * 逆 CDF：確率 p に対応する x（ガンマ空間 [0,1]）を分位点線形補間で求める。
+ *
+ * CDF の平坦域（度数 0 の連続ビン）では**左端と右端の中点**を返す。左詰めにすると
+ * 自己写像（Source=Reference）で階段状の系統的な負方向シフト（最大 ~1/HM_BINS の
+ * 恒等ずれ）が出るため、中点にしてバイアスを除去する（§5.3）。急峻な交差では
+ * 左右の逆像が一致するので通常の線形補間値になる。
+ */
 function invCdf(cdf: Float64Array, p: number): number {
   if (p <= 0) return 0;
   if (p >= 1) return 1;
-  // cdf[i] <= p < cdf[i+1] を満たす最小の i を探す（線形走査、HM_BINS は 256）。
-  let i = 0;
-  while (i < HM_BINS && cdf[i + 1] < p) i++;
-  const lo = cdf[i];
-  const hi = cdf[i + 1];
-  const denom = hi - lo;
-  const frac = denom > 0 ? (p - lo) / denom : 0;
-  return (i + frac) / HM_BINS;
+  // 左の逆像 xLo：cdf[i] < p <= cdf[i+1] を満たす最小の i で線形補間
+  //（p が平坦域の値と一致するとき平坦域の左端に着地）。線形走査、HM_BINS は 256。
+  let iLo = 0;
+  while (iLo < HM_BINS && cdf[iLo + 1] < p) iLo++;
+  const denomLo = cdf[iLo + 1] - cdf[iLo];
+  const fracLo = denomLo > 0 ? (p - cdf[iLo]) / denomLo : 0;
+  const xLo = (iLo + fracLo) / HM_BINS;
+  // 右の逆像 xHi：cdf[j] <= p < cdf[j+1] を満たす最大の j で線形補間
+  //（p が平坦域の値と一致するとき平坦域の右端に着地）。
+  let iHi = HM_BINS - 1;
+  while (iHi > 0 && cdf[iHi] > p) iHi--;
+  const denomHi = cdf[iHi + 1] - cdf[iHi];
+  const fracHi = denomHi > 0 ? (p - cdf[iHi]) / denomHi : 0;
+  const xHi = (iHi + fracHi) / HM_BINS;
+  return (xLo + xHi) / 2;
 }
 
 /**

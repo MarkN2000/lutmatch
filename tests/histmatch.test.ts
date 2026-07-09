@@ -63,6 +63,43 @@ describe('HM カーブ', () => {
       prev = v;
     }
   });
+
+  it('連続空ビンを含む疎な分布でも自己マッチは恒等に近い（平坦域中点）', () => {
+    // 値が飛び飛び（step ビンおき）のグラデーション。間に step-1 個の連続空ビンが
+    // でき、CDF に長い平坦域が並ぶ。invCdf が平坦域を左詰めすると自己写像で
+    // 系統的な負方向シフト（最大 ~1/256≈0.0039）が出るが、中点返しで解消される。
+    function makeSparseGradientSrc(count: number, step: number, seed: number): Float32Array {
+      const rng = mulberry32(seed);
+      const px = new Float32Array(count * 3);
+      const numLevels = Math.floor(HM_BINS / step);
+      for (let i = 0; i < count; i++) {
+        const level = Math.floor(rng() * numLevels) * step;
+        const gv = (level + 0.5) / HM_BINS;
+        const lin = srgbToLinear(gv);
+        px[i * 3] = lin;
+        px[i * 3 + 1] = lin;
+        px[i * 3 + 2] = lin;
+      }
+      return px;
+    }
+    // step=5 → 4 個の連続空ビン（間の空ビンが 2 以上）。両端（ビン 0・255）は占有され
+    // 上端に飽和平坦域が出ないため、内側の連続空ビン由来のずれのみを検証できる。
+    const src = makeSparseGradientSrc(8192, 5, 707);
+    const curves = buildHistMatch(src, src);
+    for (const curve of curves) {
+      // ソース分布の内側（連続空ビンがちょうど問題になる領域）で恒等ずれを検証する。
+      // 最上端は「ビン 255 直下の空ビン平坦域＋平滑化の境界複製」による別種の
+      // エッジ効果が出るため、内側 [0.1, 0.9] に限定する（本バグの対象色は分布内側）。
+      let maxErr = 0;
+      for (let i = 20; i <= 180; i++) {
+        const x = i / 200;
+        maxErr = Math.max(maxErr, Math.abs(applyCurveGamma(curve, x) - x));
+      }
+      // 平坦域中点化により左詰めの系統的シフトが消え、残差平滑化と併せて恒等ずれは
+      // 許容 1e-3 を大きく下回る（左詰め実装だと ~0.008 のずれが残り、この閾値を超える）。
+      expect(maxErr).toBeLessThan(1e-3);
+    }
+  });
 });
 
 describe('HM カーブの残差平滑化（暗部スペックル対策）', () => {
