@@ -16,12 +16,19 @@ export {
 export {
   N_MIN_PIXELS,
   COV_REG_FACTOR,
+  MKL_EPS_ABS,
   extractValidSamples,
   computeColorStats,
   regularizeCov,
   regularizedCovInv,
 } from './stats.ts';
-export { buildMkl, applyLinearTransform, MKL_RANK_RATIO } from './mkl.ts';
+export {
+  buildMkl,
+  applyLinearTransform,
+  MKL_MAX_GAIN,
+  MKL_ANISO_FULL,
+  MKL_ANISO_DIAG,
+} from './mkl.ts';
 export type { LinearTransform, MklResult } from './mkl.ts';
 export {
   HM_BINS,
@@ -36,6 +43,7 @@ export type { MatchTransform } from './pipeline.ts';
 export {
   generateLut,
   trilinearSample,
+  smoothGrid,
   MAHALANOBIS_D0,
   MAHALANOBIS_D1,
   SMOOTH_SIGMA_MAX,

@@ -15,6 +15,15 @@ export const N_MIN_PIXELS = 1024;
 export const COV_REG_FACTOR = 1e-4;
 
 /**
+ * 共分散正則化の絶対下限（リニア RGB 分散の下限・§5.2）。
+ *
+ * 相対量 `trace/3 × COV_REG_FACTOR` だけでは暗部（低分散）画像で ε がほぼ 0 になり、
+ * 収縮が効かず MKL の逆平方根ゲインが爆発する。8bit 量子化ノイズ相当（σ≒0.0032 リニア）
+ * の分散を絶対下限として与え、`ε = max(trace/3 × COV_REG_FACTOR, MKL_EPS_ABS)` とする。
+ */
+export const MKL_EPS_ABS = 1e-5;
+
+/**
  * リニア RGB(A) 画素配列から有効画素の RGB を抽出する（§5.1）。
  *
  * - RGBA の場合、アルファが `alphaThreshold` 未満の画素を除外
@@ -99,9 +108,12 @@ export function computeColorStats(samples: Float32Array): ColorStats {
   return { mean, cov, count };
 }
 
-/** 共分散行列を正則化する：Σ ← Σ + εI（ε = trace/3 × COV_REG_FACTOR、§5.2）。 */
+/**
+ * 共分散行列を正則化する：Σ ← Σ + εI。
+ * ε = max(trace/3 × COV_REG_FACTOR, MKL_EPS_ABS)（相対量に絶対下限を課す・§5.2）。
+ */
 export function regularizeCov(cov: Mat3): Mat3 {
-  const eps = ((cov[0] + cov[4] + cov[8]) / 3) * COV_REG_FACTOR;
+  const eps = Math.max(((cov[0] + cov[4] + cov[8]) / 3) * COV_REG_FACTOR, MKL_EPS_ABS);
   const r = cov.slice();
   r[0] += eps;
   r[4] += eps;

@@ -145,9 +145,10 @@ function gaussianKernel(sigma: number): Float64Array {
 
 /**
  * 3 チャンネル格子データに分離型 3D ガウシアン平滑化を適用する（複製境界）。
- * σ_cells = (smoothing/100)·SMOOTH_SIGMA_MAX·(N−1)。
+ * σ_cells = (smoothing/100)·SMOOTH_SIGMA_MAX·(N−1)。カーネルは正規化済みなので、
+ * 一様（定数）な格子は平滑化しても不変である。`data` を破壊的に更新する。
  */
-function smoothGrid(data: Float32Array, n: number, smoothing: number): void {
+export function smoothGrid(data: Float32Array, n: number, smoothing: number): void {
   if (smoothing <= 0) return;
   const sigma = (smoothing / 100) * SMOOTH_SIGMA_MAX * (n - 1);
   if (sigma < 1e-3) return;

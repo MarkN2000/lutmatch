@@ -6,7 +6,13 @@ import {
   srgbToLinear,
 } from '../src/core/colorspace.ts';
 import { mahalanobisSq } from '../src/core/linalg.ts';
-import { generateLut, MAHALANOBIS_D0, MAHALANOBIS_D1, trilinearSample } from '../src/core/lut.ts';
+import {
+  generateLut,
+  MAHALANOBIS_D0,
+  MAHALANOBIS_D1,
+  smoothGrid,
+  trilinearSample,
+} from '../src/core/lut.ts';
 import { buildMatchTransform } from '../src/core/pipeline.ts';
 import { computeColorStats, extractValidSamples, regularizedCovInv } from '../src/core/stats.ts';
 import { NEUTRAL_ADJUSTMENTS } from '../src/core/types.ts';
@@ -377,44 +383,25 @@ describe('平滑化（§5.5）', () => {
     expect(smoothedMax).toBeLessThan(rawMax * 0.9);
   });
 
-  it('一様なLUT（全格子ほぼ同値）は平滑化で不変（ガウシアンカーネルの正規化）', () => {
-    const src = makeLinearRgba(4096, 703);
-    // Reference の分散を極小にし、MKL変換をほぼ定数写像にする（T の固有値が~0に近づく）。
-    const count = 4096;
-    const rng = mulberry32(704);
-    const ref = new Float32Array(count * 4);
-    for (let i = 0; i < count; i++) {
-      const r = 0.5 + (rng() - 0.5) * 2e-6;
-      const g = 0.5 + (rng() - 0.5) * 2e-6;
-      const b = 0.5 + (rng() - 0.5) * 2e-6;
-      ref[i * 4] = srgbToLinear(r);
-      ref[i * 4 + 1] = srgbToLinear(g);
-      ref[i * 4 + 2] = srgbToLinear(b);
-      ref[i * 4 + 3] = 1;
-    }
-
+  it('一様な格子は平滑化で不変（ガウシアンカーネルの正規化）', () => {
+    // 一様（定数）格子を直接構成して平滑化に通す。ゲイン上限クランプにより MKL は
+    // もはや定数写像を生成しない（固有値は 1/MKL_MAX_GAIN で下限クランプ）ため、
+    // 平滑化の不変性は変換内部から切り離して smoothGrid 単体で検証する。
     const n = 17;
-    const withSmoothing = (smoothing: number): GenerateLutOptions =>
-      baseOptions({ mode: 'A', size: n, strength: 100, smoothing, d0: 1e9 });
-
-    const { lut: raw, fallback } = generateLut(src, ref, 4, withSmoothing(0));
-    expect(fallback).toBe(false);
-    const smoothed = generateLut(src, ref, 4, withSmoothing(70)).lut;
-
-    // 前提確認：平滑化前がほぼ定数であること。
-    let rawMin = Infinity;
-    let rawMax = -Infinity;
-    for (let i = 0; i < raw.length; i++) {
-      if (raw[i] < rawMin) rawMin = raw[i];
-      if (raw[i] > rawMax) rawMax = raw[i];
+    const uniform = new Float32Array(n * n * n * 3);
+    for (let i = 0; i < uniform.length; i += 3) {
+      uniform[i] = 0.37;
+      uniform[i + 1] = 0.62;
+      uniform[i + 2] = 0.51;
     }
-    expect(rawMax - rawMin).toBeLessThan(1e-3);
+    const smoothed = uniform.slice();
+    smoothGrid(smoothed, n, 70);
 
-    // 平滑化後も同じ値のまま（カーネル正規化により一様信号は不変）。
+    // カーネル正規化により一様信号は不変。
     let maxDiff = 0;
-    for (let i = 0; i < raw.length; i++) {
-      maxDiff = Math.max(maxDiff, Math.abs(smoothed[i] - raw[i]));
+    for (let i = 0; i < uniform.length; i++) {
+      maxDiff = Math.max(maxDiff, Math.abs(smoothed[i] - uniform[i]));
     }
-    expect(maxDiff).toBeLessThan(1e-3);
+    expect(maxDiff).toBeLessThan(1e-6);
   });
 });
