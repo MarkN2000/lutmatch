@@ -96,5 +96,6 @@ export const ja = {
   helpClose: '閉じる',
 
   // ヒント（§6.4）
-  firstHint: 'ヒント：Source と Reference の被写体が近いほど、自然で良い結果になります。',
+  firstHint:
+    'このツールは参考画像の「色の雰囲気」を移します。被写体や明るさが近い 2 枚ほど自然に仕上がり、まったく異なる場面同士ではうまく合いません。',
 } as const;

@@ -96,5 +96,6 @@ export const en: Record<MessageKey, string> = {
     'A LUT only remaps colors. It cannot reproduce spatial effects such as grain, blur, or vignetting. The closer the two subjects are, the better the result.',
   helpClose: 'Close',
 
-  firstHint: 'Tip: the closer the subjects of Source and Reference, the more natural the result.',
+  firstHint:
+    'This tool transfers the color mood of the reference image. The closer the two images are in subject and brightness, the more natural the result — completely different scenes will not match well.',
 };
