@@ -25,6 +25,7 @@ export { buildMkl, applyLinearTransform, MKL_RANK_RATIO } from './mkl.ts';
 export type { LinearTransform, MklResult } from './mkl.ts';
 export {
   HM_BINS,
+  HM_RESIDUAL_SMOOTH_SIGMA,
   buildHistMatch,
   applyCurveGamma,
   applyHistMatch,

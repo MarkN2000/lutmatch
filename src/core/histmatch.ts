@@ -16,6 +16,25 @@ import type { Vec3 } from './types.ts';
 /** HM のビン数（ガンマ空間・等間隔）。 */
 export const HM_BINS = 256;
 
+/**
+ * HM カーブの残差平滑化の標準偏差 σ（ビン単位・§5.3）。
+ *
+ * 【背景】暗部（リニア輝度 5〜15% 程度）ではソースのヒストグラムが疎になりやすく、
+ * 逆 CDF 由来のリマップカーブが**単一ビンで急峻に跳ねるスパイク**を作る。
+ * このスパイクはソースの微小な粒状ノイズ（±数レベル）を、チャンネル間で不整合な
+ * 方向の大きな色差へ増幅し、暗部にマゼンタ/緑のスペックルを生む（実機検証で確認）。
+ *
+ * 【対策】カーブから恒等 y=x を引いた**残差**にごく弱い 1D ガウシアンを掛け、
+ * 恒等を足し戻してからスパイクを近傍ビンへ均す。恒等入力（残差=0）は平滑化後も
+ * 厳密に恒等のまま → 同一性（Source=Reference → LUT≒Identity）を壊さない。
+ * 平滑化後に単調化を再適用して単調非減少を保証する。
+ *
+ * 【トレードオフ】σ を上げるほどスペックルは減るが Reference 分布への追従
+ * （マッチ品質）がわずかに甘くなる。σ=2 は暗部の傾きスパイクを 1/6〜1/10 に
+ * 抑えつつ、CDF マッチの平均挙動はほぼ保つ控えめな値。0 で平滑化無効。
+ */
+export const HM_RESIDUAL_SMOOTH_SIGMA = 2;
+
 /** 1 チャンネルのリマップカーブ。ガンマ空間の等間隔ノード y[i]（x=i/HM_BINS）を持つ。 */
 export interface ChannelCurve {
   /** ノード出力値（長さ HM_BINS+1、x=i/HM_BINS のガンマ空間値）。 */
@@ -92,6 +111,51 @@ function invCdf(cdf: Float64Array, p: number): number {
 }
 
 /**
+ * カーブノード y[] の**残差（y−恒等）**にガウシアンを掛けて暗部の傾きスパイクを均す。
+ * 恒等を足し戻したのち単調化を再適用する（§5.3・HM_RESIDUAL_SMOOTH_SIGMA 参照）。
+ *
+ * - 残差平滑化なので恒等入力（y=x）は厳密に不変 → 同一性テストを壊さない。
+ * - 境界は複製（端点残差を延長）。畳み込み後に累積 max で単調非減少を再保証する。
+ */
+function smoothResidual(y: Float64Array): void {
+  const sigma = HM_RESIDUAL_SMOOTH_SIGMA;
+  if (sigma <= 0) return;
+  const N = HM_BINS;
+  const radius = Math.max(1, Math.ceil(sigma * 3));
+
+  // 正規化ガウシアンカーネル。
+  const kernel = new Float64Array(radius * 2 + 1);
+  const inv2s2 = 1 / (2 * sigma * sigma);
+  let ksum = 0;
+  for (let t = -radius; t <= radius; t++) {
+    const w = Math.exp(-(t * t) * inv2s2);
+    kernel[t + radius] = w;
+    ksum += w;
+  }
+  for (let i = 0; i < kernel.length; i++) kernel[i] /= ksum;
+
+  // 恒等 x=i/N を引いた残差。
+  const res = new Float64Array(N + 1);
+  for (let i = 0; i <= N; i++) res[i] = y[i] - i / N;
+
+  // 残差を畳み込み（複製境界）→ 恒等を足し戻し → 単調化を再適用。
+  let prev = -Infinity;
+  for (let i = 0; i <= N; i++) {
+    let acc = 0;
+    for (let t = -radius; t <= radius; t++) {
+      let j = i + t;
+      if (j < 0) j = 0;
+      else if (j > N) j = N;
+      acc += res[j] * kernel[t + radius];
+    }
+    let v = acc + i / N;
+    if (v < prev) v = prev; // 単調非減少を再保証（正カーネルでも厳密には非保証のため）。
+    y[i] = v;
+    prev = v;
+  }
+}
+
+/**
  * Source→Reference のチャンネルリマップカーブを構築する（単調非減少を保証）。
  */
 function buildChannelCurve(cdfS: Float64Array, cdfR: Float64Array): ChannelCurve {
@@ -104,6 +168,8 @@ function buildChannelCurve(cdfS: Float64Array, cdfR: Float64Array): ChannelCurve
     y[i] = mapped < prev ? prev : mapped;
     prev = y[i];
   }
+  // 暗部の傾きスパイク抑制：残差平滑化（恒等は不変・単調性は再保証）。
+  smoothResidual(y);
   const loSlope = (y[1] - y[0]) * HM_BINS;
   const hiSlope = (y[HM_BINS] - y[HM_BINS - 1]) * HM_BINS;
   return { y, loSlope, hiSlope };
