@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { generateLut, trilinearSample } from '../src/core/lut.ts';
+import {
+  linearRgbToLab,
+  linearToSrgb,
+  rec709Luminance,
+  srgbToLinear,
+} from '../src/core/colorspace.ts';
+import { mahalanobisSq } from '../src/core/linalg.ts';
+import { generateLut, MAHALANOBIS_D0, MAHALANOBIS_D1, trilinearSample } from '../src/core/lut.ts';
+import { buildMatchTransform } from '../src/core/pipeline.ts';
+import { computeColorStats, extractValidSamples, regularizedCovInv } from '../src/core/stats.ts';
 import { NEUTRAL_ADJUSTMENTS } from '../src/core/types.ts';
-import type { GenerateLutOptions, MatchMode, Vec3 } from '../src/core/types.ts';
-import { makeLinearRgba } from './helpers.ts';
+import type { GenerateLutOptions, ManualAdjustments, MatchMode, Vec3 } from '../src/core/types.ts';
+import { makeLinearRgba, mulberry32 } from './helpers.ts';
 
 const SAMPLE = { alphaThreshold: 0.5, blackThreshold: 0 };
 
@@ -147,5 +156,265 @@ describe('ゴールデンテスト（回帰検知）', () => {
       samples[`${r},${g},${b}`] = [round(lut[idx]), round(lut[idx + 1]), round(lut[idx + 2])];
     }
     expect(samples).toMatchSnapshot();
+  });
+});
+
+describe('手動調整の作用空間（§5.5）', () => {
+  // strength:0 にすると最終ミックスが rgb = gr + (auto-gr)*0 = gr（格子座標そのもの）となり、
+  // 自動マッチ・マハラノビス減衰・平滑化の結果が一切残らない（0倍されるため）。
+  // これにより「手動調整だけが Identity 格子に効いた」状態を厳密に作れる。
+  const src = makeLinearRgba(4096, 501);
+  const ref = makeLinearRgba(4096, 502);
+
+  function manualOnly(manual: Partial<ManualAdjustments>, size = 17) {
+    return generateLut(
+      src,
+      ref,
+      4,
+      baseOptions({
+        size,
+        strength: 0,
+        smoothing: 0,
+        manual: { ...NEUTRAL_ADJUSTMENTS, ...manual },
+      }),
+    );
+  }
+
+  function gridValue(lut: Float32Array, n: number, ir: number, ig: number, ib: number): Vec3 {
+    const idx = (ir + ig * n + ib * n * n) * 3;
+    return [lut[idx], lut[idx + 1], lut[idx + 2]];
+  }
+
+  it('露出 EV=+1 で中間調のリニア値が約2倍になる', () => {
+    const size = 17;
+    const { lut } = manualOnly({ exposure: 1 }, size);
+    const mid = 8; // 8/16 = 0.5（ガンマ空間の中間調）
+    const [r, g, b] = gridValue(lut, size, mid, mid, mid);
+    const expected = 2 * srgbToLinear(0.5);
+    expect(srgbToLinear(r)).toBeCloseTo(expected, 5);
+    expect(srgbToLinear(g)).toBeCloseTo(expected, 5);
+    expect(srgbToLinear(b)).toBeCloseTo(expected, 5);
+  });
+
+  it('色温度 > 0 で Lab の b* が増加する（a* はほぼ不変）', () => {
+    const size = 17;
+    const mid = 8;
+    const { lut } = manualOnly({ temperature: 50 }, size);
+    const [r, g, b] = gridValue(lut, size, mid, mid, mid);
+    const labOut: Vec3 = [0, 0, 0];
+    linearRgbToLab(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b), labOut);
+    const labBase: Vec3 = [0, 0, 0];
+    const baseLin = srgbToLinear(0.5);
+    linearRgbToLab(baseLin, baseLin, baseLin, labBase);
+    expect(labOut[2]).toBeGreaterThan(labBase[2] + 5);
+    expect(Math.abs(labOut[1] - labBase[1])).toBeLessThan(1);
+  });
+
+  it('ティント > 0 で Lab の a* が増加する（b* はほぼ不変）', () => {
+    const size = 17;
+    const mid = 8;
+    const { lut } = manualOnly({ tint: 50 }, size);
+    const [r, g, b] = gridValue(lut, size, mid, mid, mid);
+    const labOut: Vec3 = [0, 0, 0];
+    linearRgbToLab(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b), labOut);
+    const labBase: Vec3 = [0, 0, 0];
+    const baseLin = srgbToLinear(0.5);
+    linearRgbToLab(baseLin, baseLin, baseLin, labBase);
+    expect(labOut[1]).toBeGreaterThan(labBase[1] + 5);
+    expect(Math.abs(labOut[2] - labBase[2])).toBeLessThan(1);
+  });
+
+  it('コントラスト：ピボット(ガンマ0.5)は不動点、正のコントラストで0.25は下降・0.75は上昇', () => {
+    const size = 17;
+    const { lut } = manualOnly({ contrast: 50 }, size);
+    const at = (i: number): number => gridValue(lut, size, i, i, i)[0];
+    expect(at(8)).toBeCloseTo(0.5, 4); // 8/16 = 0.5（ピボット・不動点）
+    expect(at(4)).toBeLessThan(0.25); // 4/16 = 0.25
+    expect(at(12)).toBeGreaterThan(0.75); // 12/16 = 0.75
+  });
+
+  it('彩度 −100 で完全グレースケール（R=G=B、Rec.709輝度に一致）', () => {
+    const size = 17;
+    const { lut } = manualOnly({ saturation: -100 }, size);
+    // 純色に近い格子点（ガンマ R=1,G=0,B=0）で確認。
+    const [r, g, b] = gridValue(lut, size, size - 1, 0, 0);
+    expect(Math.abs(r - g)).toBeLessThan(1e-4);
+    expect(Math.abs(g - b)).toBeLessThan(1e-4);
+    const expectedLin = rec709Luminance(srgbToLinear(1), srgbToLinear(0), srgbToLinear(0));
+    expect(r).toBeCloseTo(linearToSrgb(expectedLin), 4);
+  });
+});
+
+describe('マハラノビス外挿減衰（§5.5）', () => {
+  it('Source分布内の格子点はほぼ減衰せず、離れた格子点はf直接適用よりIdentityに近づく', () => {
+    // Source: (0.5,0.5,0.5) 付近に集中した狭いクラスタ（各チャンネル独立乱数でフルランク）。
+    const count = 4096;
+    const rngS = mulberry32(999);
+    const src = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const rr = 0.5 + (rngS() - 0.5) * 0.06;
+      const gg = 0.5 + (rngS() - 0.5) * 0.06;
+      const bb = 0.5 + (rngS() - 0.5) * 0.06;
+      src[i * 4] = srgbToLinear(rr);
+      src[i * 4 + 1] = srgbToLinear(gg);
+      src[i * 4 + 2] = srgbToLinear(bb);
+      src[i * 4 + 3] = 1;
+    }
+    // Reference: 別の狭いクラスタ（Sourceからアフィン的にシフト）。
+    const rngR = mulberry32(998);
+    const ref = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const rr = 0.7 + (rngR() - 0.5) * 0.06;
+      const gg = 0.35 + (rngR() - 0.5) * 0.06;
+      const bb = 0.6 + (rngR() - 0.5) * 0.06;
+      ref[i * 4] = srgbToLinear(rr);
+      ref[i * 4 + 1] = srgbToLinear(gg);
+      ref[i * 4 + 2] = srgbToLinear(bb);
+      ref[i * 4 + 3] = 1;
+    }
+
+    const srcSamples = extractValidSamples(src, 4, SAMPLE);
+    const refSamples = extractValidSamples(ref, 4, SAMPLE);
+    const match = buildMatchTransform('A', srcSamples, refSamples);
+    expect(match.fallback).toBe(false);
+
+    const n = 17;
+    const inv = 1 / (n - 1);
+    const { lut } = generateLut(
+      src,
+      ref,
+      4,
+      baseOptions({ mode: 'A', size: n, strength: 100, smoothing: 0 }),
+    );
+
+    const srcStats = computeColorStats(srcSamples);
+    const covInv = regularizedCovInv(srcStats.cov);
+
+    function evaluate(ir: number, ig: number, ib: number) {
+      const gr = ir * inv;
+      const gg = ig * inv;
+      const gb = ib * inv;
+      const linGrid: Vec3 = [srgbToLinear(gr), srgbToLinear(gg), srgbToLinear(gb)];
+      const matched: Vec3 = [0, 0, 0];
+      match.apply(linGrid[0], linGrid[1], linGrid[2], matched);
+      const rawGamma: Vec3 = [
+        linearToSrgb(matched[0]),
+        linearToSrgb(matched[1]),
+        linearToSrgb(matched[2]),
+      ];
+      const idx = (ir + ig * n + ib * n * n) * 3;
+      const actual: Vec3 = [lut[idx], lut[idx + 1], lut[idx + 2]];
+      const identity: Vec3 = [gr, gg, gb];
+      const d = Math.sqrt(mahalanobisSq(covInv, linGrid, srcStats.mean));
+      return { rawGamma, actual, identity, d };
+    }
+
+    // 分布内（グリッド中心 (8,8,8) は (0.5,0.5,0.5) = Sourceクラスタの中心）：ほぼ減衰なし。
+    const near = evaluate(8, 8, 8);
+    expect(near.d).toBeLessThan(MAHALANOBIS_D0);
+    for (let c = 0; c < 3; c++) {
+      expect(Math.abs(near.actual[c] - near.rawGamma[c])).toBeLessThan(1e-3);
+    }
+
+    // 分布から遠い格子点（コーナー）：f直接適用よりIdentityに近づく（ほぼ完全減衰）。
+    const far = evaluate(n - 1, 0, 0);
+    expect(far.d).toBeGreaterThan(MAHALANOBIS_D1);
+    for (let c = 0; c < 3; c++) {
+      const distActual = Math.abs(far.actual[c] - far.identity[c]);
+      const distRaw = Math.abs(far.rawGamma[c] - far.identity[c]);
+      expect(distActual).toBeLessThan(distRaw);
+      expect(distActual).toBeLessThan(1e-3);
+    }
+  });
+});
+
+describe('平滑化（§5.5）', () => {
+  it('スムージング>0で階段状（不連続）にした隣接格子点差が縮小する', () => {
+    const src = makeLinearRgba(4096, 701); // 連続的に広がるSource分布。
+    // Reference: ガンマ 0.1 近辺／0.9 近辺の2クラスタ（バイモーダル）。
+    // HM の逆CDFがSource分布の中央値付近で急峻にジャンプするカーブを作る。
+    const count = 4096;
+    const rng = mulberry32(702);
+    const ref = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const base = i < count / 2 ? 0.1 : 0.9;
+      const v = base + (rng() - 0.5) * 0.02;
+      const lin = srgbToLinear(v);
+      ref[i * 4] = lin;
+      ref[i * 4 + 1] = lin;
+      ref[i * 4 + 2] = lin;
+      ref[i * 4 + 3] = 1;
+    }
+
+    const n = 33;
+    const withSmoothing = (smoothing: number): GenerateLutOptions =>
+      baseOptions({ mode: 'B', size: n, strength: 100, smoothing, d0: 1e9 });
+
+    const raw = generateLut(src, ref, 4, withSmoothing(0)).lut;
+    const smoothed = generateLut(src, ref, 4, withSmoothing(70)).lut;
+
+    function maxAdjacentDiff(lut: Float32Array): number {
+      let maxDiff = 0;
+      for (let ib = 0; ib < n; ib++) {
+        for (let ig = 0; ig < n; ig++) {
+          for (let ir = 0; ir < n - 1; ir++) {
+            const i0 = (ir + ig * n + ib * n * n) * 3;
+            const i1 = (ir + 1 + ig * n + ib * n * n) * 3;
+            for (let c = 0; c < 3; c++) {
+              maxDiff = Math.max(maxDiff, Math.abs(lut[i1 + c] - lut[i0 + c]));
+            }
+          }
+        }
+      }
+      return maxDiff;
+    }
+
+    const rawMax = maxAdjacentDiff(raw);
+    const smoothedMax = maxAdjacentDiff(smoothed);
+    // バイモーダルReferenceにより急峻なジャンプが実際に生じていることを確認したうえで、
+    // 平滑化がその隣接差を縮小させることを検証する。
+    expect(rawMax).toBeGreaterThan(0.2);
+    expect(smoothedMax).toBeLessThan(rawMax * 0.9);
+  });
+
+  it('一様なLUT（全格子ほぼ同値）は平滑化で不変（ガウシアンカーネルの正規化）', () => {
+    const src = makeLinearRgba(4096, 703);
+    // Reference の分散を極小にし、MKL変換をほぼ定数写像にする（T の固有値が~0に近づく）。
+    const count = 4096;
+    const rng = mulberry32(704);
+    const ref = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const r = 0.5 + (rng() - 0.5) * 2e-6;
+      const g = 0.5 + (rng() - 0.5) * 2e-6;
+      const b = 0.5 + (rng() - 0.5) * 2e-6;
+      ref[i * 4] = srgbToLinear(r);
+      ref[i * 4 + 1] = srgbToLinear(g);
+      ref[i * 4 + 2] = srgbToLinear(b);
+      ref[i * 4 + 3] = 1;
+    }
+
+    const n = 17;
+    const withSmoothing = (smoothing: number): GenerateLutOptions =>
+      baseOptions({ mode: 'A', size: n, strength: 100, smoothing, d0: 1e9 });
+
+    const { lut: raw, fallback } = generateLut(src, ref, 4, withSmoothing(0));
+    expect(fallback).toBe(false);
+    const smoothed = generateLut(src, ref, 4, withSmoothing(70)).lut;
+
+    // 前提確認：平滑化前がほぼ定数であること。
+    let rawMin = Infinity;
+    let rawMax = -Infinity;
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] < rawMin) rawMin = raw[i];
+      if (raw[i] > rawMax) rawMax = raw[i];
+    }
+    expect(rawMax - rawMin).toBeLessThan(1e-3);
+
+    // 平滑化後も同じ値のまま（カーネル正規化により一様信号は不変）。
+    let maxDiff = 0;
+    for (let i = 0; i < raw.length; i++) {
+      maxDiff = Math.max(maxDiff, Math.abs(smoothed[i] - raw[i]));
+    }
+    expect(maxDiff).toBeLessThan(1e-3);
   });
 });

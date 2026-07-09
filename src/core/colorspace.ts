@@ -72,7 +72,8 @@ const ZN = 1.08883;
 const DELTA = 6 / 29;
 const DELTA3 = DELTA * DELTA * DELTA;
 
-// XYZ→Lab の非線形関数 f（負値には符号付き立方根で連続に拡張）。
+// XYZ→Lab の非線形関数 f。小さい t（0 以下の負値を含む）は CIE 標準の線形分岐
+// t/(3Δ²)+4/29 でカバーされ、cbrt 分岐と滑らかに接続する（符号付き立方根ではない）。
 function labF(t: number): number {
   if (t > DELTA3) return Math.cbrt(t);
   return t / (3 * DELTA * DELTA) + 4 / 29;
