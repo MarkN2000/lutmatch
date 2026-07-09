@@ -13,11 +13,6 @@ export const ja = {
   langToggleAria: '言語を英語に切り替える',
   helpAria: '使い方を表示',
 
-  // 進行インジケーター（§6.0）
-  step1: '画像を選ぶ',
-  step2: '調整',
-  step3: '書き出し',
-
   // ---- 入力（ドロップゾーン・§4.1 / §6.2）----
   sourceTitle: '元画像 (Source)',
   referenceTitle: '参考画像 (Reference)',

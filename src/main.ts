@@ -23,7 +23,6 @@ import { createPreview } from './ui/preview.ts';
 import { createExportBar } from './ui/exportbar.ts';
 import { createToastHost } from './ui/toast.ts';
 import { createHelpModal } from './ui/help.ts';
-import { createStepper } from './ui/stepper.ts';
 import { renderResultPng } from './ui/export-png.ts';
 
 import { loadImage, ImageLoadError, type LoadedImage } from './io/image.ts';
@@ -87,8 +86,6 @@ const brandTitle = el('h1', 'app-header__title');
 const brandTag = el('p', 'app-header__tagline');
 append(brand, brandTitle, brandTag);
 
-const stepper = createStepper();
-
 const headerActions = el('div', 'app-header__actions');
 const langBtn = el('button', 'btn btn--ghost app-header__lang');
 langBtn.type = 'button';
@@ -98,7 +95,7 @@ helpBtn.type = 'button';
 helpBtn.textContent = '?';
 append(headerActions, langBtn, helpBtn);
 
-append(header, brand, stepper.element, headerActions);
+append(header, brand, headerActions);
 
 // ---- 入力ブロック ----
 const inputsBlock = el('section', 'panel block-inputs');
@@ -286,8 +283,6 @@ function updateUiState(): void {
   // 誘導ハイライト（片方のみ投入）。
   dropSource.setGuiding(state.source == null && state.reference != null);
   dropReference.setGuiding(state.reference == null && state.source != null);
-
-  stepper.setCurrent(both ? 2 : 1);
 }
 
 // ============================================================
@@ -428,7 +423,6 @@ async function downloadCube(): Promise<void> {
     // lut.slice() で複製を渡す（serializeCube は buffer を転送＝neuter するため）。
     const text = await worker.serializeCube(lut.slice(), state.currentLutSize, title);
     triggerDownload(new Blob([text], { type: 'text/plain' }), filename);
-    stepper.setCurrent(3);
   } catch (err) {
     if (!(err instanceof SupersededError)) toast.show(t('errGenerate'), 'error');
   } finally {

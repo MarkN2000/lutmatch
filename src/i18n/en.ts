@@ -15,10 +15,6 @@ export const en: Record<MessageKey, string> = {
   langToggleAria: 'Switch language to Japanese',
   helpAria: 'Show help',
 
-  step1: 'Select images',
-  step2: 'Adjust',
-  step3: 'Export',
-
   // ---- Input (dropzones) ----
   sourceTitle: 'Source',
   referenceTitle: 'Reference',

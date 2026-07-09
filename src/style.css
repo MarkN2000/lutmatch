@@ -155,49 +155,6 @@ body {
   gap: 8px;
 }
 
-/* ---------- 進行インジケーター ---------- */
-.stepper {
-  display: flex;
-  gap: 6px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex-wrap: wrap;
-}
-.stepper__item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-faint);
-  font-size: 13px;
-  padding: 4px 8px;
-  border-radius: 999px;
-}
-.stepper__num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--bg-elev2);
-  color: var(--text-dim);
-  font-size: 12px;
-  font-weight: 600;
-}
-.stepper__item.is-current {
-  color: var(--text);
-  background: rgba(111, 159, 216, 0.14);
-}
-.stepper__item.is-current .stepper__num {
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-.stepper__item.is-done .stepper__num {
-  background: var(--accent-strong);
-  color: var(--accent-contrast);
-}
-
 /* ---------- メインレイアウト ---------- */
 .app-main {
   flex: 1;
