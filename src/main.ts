@@ -332,7 +332,7 @@ async function loadSamples(): Promise<void> {
   const base = import.meta.env.BASE_URL;
   await Promise.all([
     handleFile('source', `${base}sample-source.webp`),
-    handleFile('reference', `${base}sample-reference.png`),
+    handleFile('reference', `${base}sample-reference.webp`),
   ]);
 }
 

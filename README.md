@@ -39,7 +39,6 @@ npm run dev         # 開発サーバー起動
 npm run build       # 型チェック + 本番ビルド（dist/ に出力）
 npx vitest run      # テスト実行
 npm run typecheck   # 型チェックのみ（tsc --noEmit）
-npm run gen:samples # サンプル画像の再生成
 ```
 
 ### 技術スタック
@@ -59,7 +58,7 @@ src/
 ├─ ui/       # UI コンポーネント（素の DOM + CSS）
 └─ i18n/     # 日英の文言辞書
 tests/       # vitest（core/ 対象のユニット・同一性・ゴールデンテスト）
-scripts/     # サンプル画像の生成スクリプト
+public/      # サンプル画像
 ```
 
 ### アルゴリズム概要
