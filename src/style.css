@@ -52,6 +52,11 @@ body {
   flex-direction: column;
 }
 
+/* display を指定した要素でも hidden 属性を必ず優先させる */
+[hidden] {
+  display: none !important;
+}
+
 .visually-hidden {
   position: absolute !important;
   width: 1px;
