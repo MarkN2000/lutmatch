@@ -56,7 +56,11 @@ export const NEUTRAL_ADJUSTMENTS: ManualAdjustments = {
 export interface SampleOptions {
   /** アルファしきい値。これ未満のアルファを持つ画素を統計から除外（既定 0.5）。 */
   alphaThreshold: number;
-  /** ブラック保護しきい値。Rec.709 リニア輝度がこれ未満の画素を除外（0–0.20）。 */
+  /**
+   * ブラック保護しきい値。**リニア輝度**（Rec.709）がこれ未満の画素を除外する。
+   * UI の知覚（sRGB）% は呼び出し側で sRGB→リニア変換してから渡す責務分担
+   * （リニア 0.05 は知覚 ≒24.5% に相当するため、UI の % をそのまま渡してはならない）。
+   */
   blackThreshold: number;
 }
 

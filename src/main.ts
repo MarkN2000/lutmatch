@@ -28,7 +28,7 @@ import { renderResultPng } from './ui/export-png.ts';
 import { loadImage, ImageLoadError, type LoadedImage } from './io/image.ts';
 import { MatchWorkerClient, SupersededError } from './worker/client.ts';
 import type { GenerateLutRequestPayload } from './worker/protocol.ts';
-import { NEUTRAL_ADJUSTMENTS, type GenerateLutOptions, type MatchMode } from './core/index.ts';
+import { NEUTRAL_ADJUSTMENTS, srgbToLinear, type GenerateLutOptions, type MatchMode } from './core/index.ts';
 
 // ============================================================
 // 定数・既定値（§4.4）
@@ -42,7 +42,7 @@ const DEFAULTS: Record<string, number> = {
   saturation: 0,
   temperature: 0,
   tint: 0,
-  blackProtection: 5, // %（0–20）。sample.blackThreshold へは /100 で渡す
+  blackProtection: 5, // %（0–20）。UI は知覚（sRGB）輝度%。sample.blackThreshold へは srgbToLinear(%/100) でリニア輝度に変換して渡す
 };
 
 const ALPHA_THRESHOLD = 0.5;
@@ -360,7 +360,9 @@ function buildOptions(): GenerateLutOptions {
     },
     sample: {
       alphaThreshold: ALPHA_THRESHOLD,
-      blackThreshold: state.blackProtection / 100,
+      // UI の blackProtection は知覚（sRGB）輝度%。コア API はリニア輝度で比較するため、
+      // ここ（UI 境界）で sRGB→リニアに変換して渡す（リニア 0.05 は知覚 ≒24.5% に相当し桁違い）。
+      blackThreshold: srgbToLinear(state.blackProtection / 100),
     },
   };
 }
@@ -439,16 +441,24 @@ async function downloadCube(): Promise<void> {
   }
 }
 
+let savingPng = false;
+
 async function savePng(): Promise<void> {
   const lut = state.currentLut;
   const src = state.source;
   if (!lut || !src) return;
+  if (savingPng) return; // 連打による多重実行を防止（同期の重い全画素トリリニア）。
+  savingPng = true;
+  exportBar.setBusy(true);
   try {
     const blob = await renderResultPng(src.previewBitmap, lut, state.currentLutSize);
     const filename = exportBar.getFileName().replace(/\.cube$/i, '.png');
     triggerDownload(blob, filename);
   } catch {
     toast.show(t('errGenerate'), 'error');
+  } finally {
+    savingPng = false;
+    exportBar.setBusy(false);
   }
 }
 
