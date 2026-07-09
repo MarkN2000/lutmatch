@@ -2,15 +2,23 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="元画像と参考画像から色を合わせる 3D LUT を自動生成し .cube を書き出す完全ブラウザ内アプリ"
+    />
     <title>LUT Match</title>
     <style>
+      /* 初期描画のちらつき防止（style.css ロード前の下地） */
       html,
       body {
         margin: 0;
-        padding: 0;
-        background-color: #121212;
-        color: #f0f0f0;
+        background-color: #16171a;
+        color: #ececed;
       }
     </style>
   </head>
