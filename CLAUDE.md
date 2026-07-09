@@ -61,6 +61,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ユニット：色空間往復誤差、MKL 閉形式解、HM の単調性、.cube フォーマット妥当性
 - ゴールデンテスト：固定入力ペアの LUT スナップショット比較（回帰検知）
 - 同一性テスト：Source＝Reference のとき LUT ≒ Identity になること
+- **ゴールデンの更新**：意図的なアルゴリズム変更でスナップショットが変わる場合のみ `npx vitest run -u` で更新する。更新時は変化が改善方向であることを確認し、理由をコミットメッセージ（必要なら spec §13）に記録すること
 
 ## UI の最重要原則（spec.md §6）
 
