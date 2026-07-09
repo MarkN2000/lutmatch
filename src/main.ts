@@ -67,6 +67,7 @@ const state = {
   currentLut: null as Float32Array | null,
   currentLutSize: 0,
   activeDrags: 0,
+  loadGeneration: { source: 0, reference: 0 } as Record<Role, number>,
 };
 
 const worker = new MatchWorkerClient();
@@ -292,10 +293,18 @@ function updateUiState(): void {
 type Role = 'source' | 'reference';
 
 async function handleFile(role: Role, file: File | Blob | string): Promise<void> {
+  // 同一 role への連続投入で、遅れて解決した古いデコードが後勝ちしないよう
+  // 世代を管理する（開始時に採番し、完了時に最新か確認）。
+  const generation = ++state.loadGeneration[role];
   try {
     const loaded = await loadImage(file);
+    if (generation !== state.loadGeneration[role]) {
+      loaded.dispose(); // 追い越されたので静かに破棄
+      return;
+    }
     setImage(role, loaded);
   } catch (err) {
+    if (generation !== state.loadGeneration[role]) return; // 古い失敗は無視
     if (err instanceof ImageLoadError && err.kind === 'unsupported-format') {
       toast.show(t('errUnsupported'), 'error');
     } else if (typeof file === 'string') {

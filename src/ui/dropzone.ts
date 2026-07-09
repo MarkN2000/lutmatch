@@ -23,6 +23,11 @@ const TITLE_KEY: Record<DropzoneRole, MessageKey> = {
   reference: 'referenceTitle',
 };
 
+const GUIDE_KEY: Record<DropzoneRole, MessageKey> = {
+  source: 'guideSource',
+  reference: 'guideReference',
+};
+
 export function createDropzone(
   role: DropzoneRole,
   onFile: (file: File) => void,
@@ -47,10 +52,11 @@ export function createDropzone(
   append(root, title, thumbWrap, hint, formats, fileInput);
 
   let hasImage = false;
+  let guiding = false;
 
   const refreshText = (): void => {
     title.textContent = t(TITLE_KEY[role]);
-    hint.textContent = hasImage ? t('dropReplaceHint') : t('dropHint');
+    hint.textContent = guiding ? t(GUIDE_KEY[role]) : hasImage ? t('dropReplaceHint') : t('dropHint');
     formats.textContent = hasImage ? '' : t('dropFormats');
     root.setAttribute('aria-label', t(TITLE_KEY[role]));
   };
@@ -114,8 +120,10 @@ export function createDropzone(
       }
       refreshText();
     },
-    setGuiding(guiding): void {
+    setGuiding(nextGuiding): void {
+      guiding = nextGuiding;
       root.classList.toggle('is-guiding', guiding);
+      refreshText();
     },
   };
 }
