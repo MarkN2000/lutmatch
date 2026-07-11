@@ -170,7 +170,7 @@ describe('ゴールデンテスト（回帰検知）', () => {
       ref,
       4,
       // UI 既定構成をモデル化する（strength/smoothing/noiseSuppression とも main.ts の DEFAULTS と揃える）。
-      baseOptions({ mode: 'C', size: 17, strength: 85, smoothing: 20, noiseSuppression: 15 }),
+      baseOptions({ mode: 'C', size: 17, strength: 80, smoothing: 20, noiseSuppression: 0 }),
     );
     // 代表的な格子点をサンプルして丸め、スナップショット比較。
     const round = (v: number): number => Math.round(v * 1e5) / 1e5;

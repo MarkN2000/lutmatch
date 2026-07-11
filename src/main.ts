@@ -35,9 +35,9 @@ import { NEUTRAL_ADJUSTMENTS, srgbToLinear, type GenerateLutOptions, type MatchM
 // ============================================================
 
 const DEFAULTS: Record<string, number> = {
-  strength: 85,
+  strength: 80,
   smoothing: 20,
-  noiseSuppression: 15,
+  noiseSuppression: 0,
   exposure: 0,
   contrast: 0,
   saturation: 0,
