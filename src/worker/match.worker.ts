@@ -79,14 +79,18 @@ function handleGenerateLut(msg: GenerateLutRequestMessage): void {
 
     if (isSuperseded(latestGenerateLutId, id)) return;
     post(buildProgress('generate-lut', id, 'finalizing', 0.95));
-    // result.lut は generateLut が新規確保するため裏付けは常に通常の ArrayBuffer
-    // （SharedArrayBuffer は §3 で不使用）。Float32Array.buffer の型は ArrayBufferLike の
+    // result.lut / effectiveCurves / histSource / histResult は generateLut がそれぞれ
+    // 独立に新規確保するため、裏付けは常に通常の ArrayBuffer（SharedArrayBuffer は §3 で
+    // 不使用）かつ subarray 共有でもない。Float32Array.buffer の型は ArrayBufferLike の
     // ため narrow する。
     const resultMsg = buildGenerateLutResult(
       id,
       result.lut.buffer as ArrayBuffer,
       result.size,
       result.fallback,
+      result.effectiveCurves.buffer as ArrayBuffer,
+      result.histSource.buffer as ArrayBuffer,
+      result.histResult.buffer as ArrayBuffer,
     );
     post(resultMsg, generateLutResultTransferables(resultMsg));
   } catch (err) {

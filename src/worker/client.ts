@@ -56,6 +56,12 @@ export interface GenerateLutClientResult {
   lut: Float32Array;
   size: number;
   fallback: boolean;
+  /** 実効（記述的）カーブ F。`[R|G|B|M]` の4ブロック連結・各ブロック長 CURVE_BINS（§5.7）。 */
+  effectiveCurves: Float32Array;
+  /** Source のガンマ空間ヒストグラム。`[R|G|B|Y']` の4ブロック連結・各ブロック長 HIST_BINS。 */
+  histSource: Float32Array;
+  /** 結果（最終 LUT 通過後）のガンマ空間ヒストグラム。同上の形状。 */
+  histResult: Float32Array;
 }
 
 /** 保留中の LUT 生成リクエスト。 */
@@ -288,7 +294,14 @@ export class MatchWorkerClient {
         if (p && !isSuperseded(p.id, msg.id)) {
           clearTimeout(p.timer);
           this.pendingGenerateLut = null;
-          p.resolve({ lut: new Float32Array(msg.lut), size: msg.size, fallback: msg.fallback });
+          p.resolve({
+            lut: new Float32Array(msg.lut),
+            size: msg.size,
+            fallback: msg.fallback,
+            effectiveCurves: new Float32Array(msg.effectiveCurves),
+            histSource: new Float32Array(msg.histSource),
+            histResult: new Float32Array(msg.histResult),
+          });
         }
         break;
       }

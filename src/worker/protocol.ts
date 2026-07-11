@@ -49,13 +49,24 @@ export interface GenerateLutRequestMessage {
   payload: GenerateLutRequestPayload;
 }
 
-/** LUT 生成結果メッセージ（Worker → メイン）。`lut` は転送された ArrayBuffer。 */
+/**
+ * LUT 生成結果メッセージ（Worker → メイン）。`lut`/`effectiveCurves`/`histSource`/`histResult`
+ * はいずれも転送された ArrayBuffer（Float32Array の裏付け）。
+ *
+ * ビン数（CURVE_BINS/HIST_BINS）はメッセージに含めない。呼び出し側は `core/index.ts` の
+ * 共有定数 `CURVE_BINS`/`HIST_BINS` を import して使う（DRY・値の二重管理を避ける）。
+ * - `effectiveCurves`：`[R|G|B|M]` の4ブロック連結・各ブロック長 `CURVE_BINS`
+ * - `histSource`/`histResult`：`[R|G|B|Y']` の4ブロック連結・各ブロック長 `HIST_BINS`
+ */
 export interface GenerateLutResultMessage {
   kind: 'generate-lut-result';
   id: number;
   lut: ArrayBuffer;
   size: number;
   fallback: boolean;
+  effectiveCurves: ArrayBuffer;
+  histSource: ArrayBuffer;
+  histResult: ArrayBuffer;
 }
 
 /** .cube シリアライズリクエストのペイロード。 */
@@ -169,8 +180,11 @@ export function buildGenerateLutResult(
   lut: ArrayBuffer,
   size: number,
   fallback: boolean,
+  effectiveCurves: ArrayBuffer,
+  histSource: ArrayBuffer,
+  histResult: ArrayBuffer,
 ): GenerateLutResultMessage {
-  return { kind: 'generate-lut-result', id, lut, size, fallback };
+  return { kind: 'generate-lut-result', id, lut, size, fallback, effectiveCurves, histSource, histResult };
 }
 
 /** .cube シリアライズ結果メッセージを組み立てる。 */
@@ -199,9 +213,14 @@ export function generateLutRequestTransferables(
   return [payload.source.buffer, payload.reference.buffer];
 }
 
-/** LUT 生成結果で転送すべき ArrayBuffer 列（lut のみ）。 */
+/**
+ * LUT 生成結果で転送すべき ArrayBuffer 列
+ * （lut → effectiveCurves → histSource → histResult の順で計4個）。
+ * 各バッファは generateLut 内で独立確保されている前提（subarray の共有 buffer だと
+ * transfer で兄弟 view が破壊されるため不可）。
+ */
 export function generateLutResultTransferables(msg: GenerateLutResultMessage): ArrayBuffer[] {
-  return [msg.lut];
+  return [msg.lut, msg.effectiveCurves, msg.histSource, msg.histResult];
 }
 
 /** .cube シリアライズリクエストで転送すべき ArrayBuffer 列（lut のみ）。 */

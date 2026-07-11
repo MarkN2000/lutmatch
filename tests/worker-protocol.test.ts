@@ -96,14 +96,20 @@ describe('レスポンス・進捗ビルダー', () => {
     });
   });
 
-  it('buildGenerateLutResult：kind/id/size/fallback と lut 参照', () => {
+  it('buildGenerateLutResult：kind/id/size/fallback と各バッファ参照', () => {
     const lut = new ArrayBuffer(12);
-    const msg = buildGenerateLutResult(9, lut, 2, true);
+    const effectiveCurves = new ArrayBuffer(4 * 64 * 4);
+    const histSource = new ArrayBuffer(4 * 256 * 4);
+    const histResult = new ArrayBuffer(4 * 256 * 4);
+    const msg = buildGenerateLutResult(9, lut, 2, true, effectiveCurves, histSource, histResult);
     expect(msg.kind).toBe('generate-lut-result');
     expect(msg.id).toBe(9);
     expect(msg.lut).toBe(lut);
     expect(msg.size).toBe(2);
     expect(msg.fallback).toBe(true);
+    expect(msg.effectiveCurves).toBe(effectiveCurves); // 参照等価（コピーしていない）
+    expect(msg.histSource).toBe(histSource);
+    expect(msg.histResult).toBe(histResult);
   });
 
   it('buildSerializeCubeResult：kind/id/text が正しい', () => {
@@ -133,12 +139,18 @@ describe('転送リスト（Transferable）ヘルパー', () => {
     expect(list[1]).toBe(reference.buffer);
   });
 
-  it('generateLutResultTransferables：lut バッファ 1 個のみ', () => {
+  it('generateLutResultTransferables：lut/effectiveCurves/histSource/histResult の4バッファを順序通り返す', () => {
     const lut = new ArrayBuffer(12);
-    const msg = buildGenerateLutResult(1, lut, 2, false);
+    const effectiveCurves = new ArrayBuffer(4 * 64 * 4);
+    const histSource = new ArrayBuffer(4 * 256 * 4);
+    const histResult = new ArrayBuffer(4 * 256 * 4);
+    const msg = buildGenerateLutResult(1, lut, 2, false, effectiveCurves, histSource, histResult);
     const list = generateLutResultTransferables(msg);
-    expect(list).toHaveLength(1);
+    expect(list).toHaveLength(4);
     expect(list[0]).toBe(lut);
+    expect(list[1]).toBe(effectiveCurves);
+    expect(list[2]).toBe(histSource);
+    expect(list[3]).toBe(histResult);
   });
 
   it('serializeCubeRequestTransferables：lut バッファ 1 個のみ', () => {
