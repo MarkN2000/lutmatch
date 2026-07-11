@@ -203,13 +203,14 @@ function attenuationWeight(dSq: number, d0: number): number {
 
 /**
  * LUT を trilinear 補間でサンプルする（Canvas 2D フォールバック／テスト用）。
- * @param lut LUT データ（長さ n³×3・R 最速）
+ * @param lut LUT／格子データ（長さ n³×3・R 最速）。実効カーブ計算では base 格子
+ *            （Float64Array・クランプ前）も渡すため型を両対応にしている。
  * @param n 格子解像度
  * @param r,g,b 入力（[0,1] 前提・範囲外はクランプ）
  * @param out 出力（長さ 3）
  */
 export function trilinearSample(
-  lut: Float32Array,
+  lut: Float32Array | Float64Array,
   n: number,
   r: number,
   g: number,
