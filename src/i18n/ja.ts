@@ -38,6 +38,10 @@ export const ja = {
   detailsTitle: '詳細調整',
   smoothingLabel: 'スムージング',
   smoothingTooltip: 'LUT を 3D 平滑化してバンディング・色飛びを抑えます。',
+  noiseSuppressionLabel: 'ノイズ抑制',
+  noiseSuppressionTooltip: '階調の急変を抑え、ノイズの増幅を防ぎます（ノイズ除去ではありません）。',
+  noiseSuppressionDisabledReason:
+    'ナチュラル（線形マッチのみ）ではヒストグラムマッチを使わないため効果がありません。',
   exposureLabel: '露出',
   exposureTooltip: '明るさ（EV）。リニア空間で ×2^EV を掛けます。',
   contrastLabel: 'コントラスト',

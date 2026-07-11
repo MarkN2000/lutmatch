@@ -73,11 +73,13 @@ function histApply(curves: HistMatchCurves) {
  * @param mode 自動マッチのモード
  * @param srcSamples Source のパック RGB サンプル（リニア・有効画素のみ）
  * @param refSamples Reference のパック RGB サンプル（リニア・有効画素のみ）
+ * @param noiseSuppression ノイズ抑制 s（0–100・§5.3）。HM を使う B/C にのみ作用（A は無関係）。
  */
 export function buildMatchTransform(
   mode: MatchMode,
   srcSamples: Float32Array,
   refSamples: Float32Array,
+  noiseSuppression: number,
 ): MatchTransform {
   const srcStats = computeColorStats(srcSamples);
   const refStats = computeColorStats(refSamples);
@@ -101,12 +103,20 @@ export function buildMatchTransform(
       return { apply: linearApply(mkl.transform), fallback: mkl.fallback, srcMean, srcCovInv };
     }
     case 'B': {
-      const curves = buildHistMatch(srcSamples, refSamples);
+      const curves = buildHistMatch(srcSamples, refSamples, noiseSuppression);
       return { apply: histApply(curves), fallback: false, srcMean, srcCovInv };
     }
     case 'C':
     default:
-      return buildComposite(srcSamples, refSamples, srcStats, refStats, n, srcMean, srcCovInv);
+      return buildComposite(
+        srcSamples,
+        refSamples,
+        refStats,
+        n,
+        srcMean,
+        srcCovInv,
+        noiseSuppression,
+      );
   }
 }
 
@@ -114,14 +124,15 @@ export function buildMatchTransform(
 function buildComposite(
   srcSamples: Float32Array,
   refSamples: Float32Array,
-  _srcStats: ColorStats,
   refStats: ColorStats,
   n: number,
   srcMean: Vec3,
   srcCovInv: Mat3,
+  noiseSuppression: number,
 ): MatchTransform {
   // 1 段目 HM：元 Source 分布 → 元 Reference 分布。Source を押し出して S₁ を得る。
-  const hm1 = buildHistMatch(srcSamples, refSamples);
+  // ノイズ抑制は 1 段目・2 段目双方に同一パラメータを適用する（§5.3）。
+  const hm1 = buildHistMatch(srcSamples, refSamples, noiseSuppression);
   const s1 = mapSamples(srcSamples, histApply(hm1));
 
   // MKL 段：S₁ の平均・共分散を Reference へ合わせる。S₁ を押し出して S₂ を得る。
@@ -130,7 +141,7 @@ function buildComposite(
   const s2 = mapSamples(s1, linearApply(mkl.transform));
 
   // 2 段目 HM：S₂ の分布 → 元 Reference 分布。
-  const hm2 = buildHistMatch(s2, refSamples);
+  const hm2 = buildHistMatch(s2, refSamples, noiseSuppression);
 
   const t1: Vec3 = [0, 0, 0];
   const t2: Vec3 = [0, 0, 0];

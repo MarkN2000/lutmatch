@@ -74,6 +74,12 @@ export interface GenerateLutOptions {
   strength: number;
   /** スムージング 0–100（3D ガウシアン平滑化）。 */
   smoothing: number;
+  /**
+   * ノイズ抑制 0–100（§5.3）。HM カーブの傾き急変を抑え色ノイズの増幅を防ぐ。
+   * 残差平滑化 σ のパラメータ化と CLAHE 式傾き上限クランプを同時に駆動する。
+   * モード A（MKL のみ）では無効。s=0 は現行挙動（σ=2・クランプなし）と一致。
+   */
+  noiseSuppression: number;
   /** 手動調整。 */
   manual: ManualAdjustments;
   /** 有効画素抽出条件。 */

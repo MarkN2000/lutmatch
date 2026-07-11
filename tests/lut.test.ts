@@ -27,6 +27,8 @@ function baseOptions(overrides: Partial<GenerateLutOptions>): GenerateLutOptions
     size: 17,
     strength: 85,
     smoothing: 20,
+    // テスト既定は 0（クランプなし・σ=2＝素の HM 挙動）。UI 既定 15 はゴールデンテスト側で明示。
+    noiseSuppression: 0,
     manual: { ...NEUTRAL_ADJUSTMENTS },
     sample: SAMPLE,
     ...overrides,
@@ -63,6 +65,27 @@ describe('同一性テスト（Source=Reference・スムージング0・強度10
       );
       expect(maxIdentityError(lut, size)).toBeLessThan(1e-3);
     });
+  }
+});
+
+describe('同一性テスト×ノイズ抑制（§5.3・§11⑥）', () => {
+  // Source=Reference のとき HM カーブは恒等（残差 0）。傾きクランプは cap=S_max·Δx≥Δx
+  // ゆえ恒等（傾き Δx）を不変に保ち、σ(s) の残差平滑化も恒等残差 0 を厳密保持するため、
+  // 任意の s で LUT ≒ Identity になる（HM を使う B/C で検証）。
+  const modes: MatchMode[] = ['B', 'C'];
+  for (const mode of modes) {
+    for (const noiseSuppression of [0, 15, 50, 100]) {
+      it(`モード ${mode}・s=${noiseSuppression}：LUT が Identity に一致`, () => {
+        const px = makeLinearRgba(2048, 100);
+        const { lut, size } = generateLut(
+          px,
+          px,
+          4,
+          baseOptions({ mode, strength: 100, smoothing: 0, noiseSuppression }),
+        );
+        expect(maxIdentityError(lut, size)).toBeLessThan(1e-3);
+      });
+    }
   }
 });
 
@@ -146,7 +169,8 @@ describe('ゴールデンテスト（回帰検知）', () => {
       src,
       ref,
       4,
-      baseOptions({ mode: 'C', size: 17, strength: 85, smoothing: 20 }),
+      // UI 既定構成をモデル化する（strength/smoothing/noiseSuppression とも main.ts の DEFAULTS と揃える）。
+      baseOptions({ mode: 'C', size: 17, strength: 85, smoothing: 20, noiseSuppression: 15 }),
     );
     // 代表的な格子点をサンプルして丸め、スナップショット比較。
     const round = (v: number): number => Math.round(v * 1e5) / 1e5;
@@ -281,7 +305,7 @@ describe('マハラノビス外挿減衰（§5.5）', () => {
 
     const srcSamples = extractValidSamples(src, 4, SAMPLE);
     const refSamples = extractValidSamples(ref, 4, SAMPLE);
-    const match = buildMatchTransform('A', srcSamples, refSamples);
+    const match = buildMatchTransform('A', srcSamples, refSamples, 0);
     expect(match.fallback).toBe(false);
 
     const n = 17;

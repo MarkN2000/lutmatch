@@ -33,6 +33,9 @@ export type { LinearTransform, MklResult } from './mkl.ts';
 export {
   HM_BINS,
   HM_RESIDUAL_SMOOTH_SIGMA,
+  noiseSuppressionSigma,
+  noiseSuppressionSlopeMax,
+  clampCurveSlope,
   buildHistMatch,
   applyCurveGamma,
   applyHistMatch,

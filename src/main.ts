@@ -37,6 +37,7 @@ import { NEUTRAL_ADJUSTMENTS, srgbToLinear, type GenerateLutOptions, type MatchM
 const DEFAULTS: Record<string, number> = {
   strength: 85,
   smoothing: 20,
+  noiseSuppression: 15,
   exposure: 0,
   contrast: 0,
   saturation: 0,
@@ -56,6 +57,7 @@ const state = {
   mode: 'C' as MatchMode,
   strength: DEFAULTS.strength,
   smoothing: DEFAULTS.smoothing,
+  noiseSuppression: DEFAULTS.noiseSuppression,
   exposure: DEFAULTS.exposure,
   contrast: DEFAULTS.contrast,
   saturation: DEFAULTS.saturation,
@@ -123,6 +125,7 @@ const modeSection = el('div', 'control-group');
 const modeLabel = el('div', 'control-group__label');
 const modeSegment = createModeSegment(state.mode, (mode) => {
   state.mode = mode;
+  updateNoiseSuppressionDisabled();
   scheduleRecompute();
 });
 append(modeSection, modeLabel, modeSegment.element);
@@ -145,8 +148,9 @@ const strengthSlider = createSlider({
 
 const accordion = createAccordion('detailsTitle');
 
-// 詳細 7 項目（§4.4）。
+// 詳細 8 項目（§4.4・§6.0）。
 const smoothingSlider = makeParamSlider('smoothingLabel', 'smoothingTooltip', 0, 100, 1, DEFAULTS.smoothing, (v) => `${Math.round(v)}`, (v) => (state.smoothing = v));
+const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
 const exposureSlider = makeParamSlider('exposureLabel', 'exposureTooltip', -2, 2, 0.05, DEFAULTS.exposure, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} EV`, (v) => (state.exposure = v));
 const contrastSlider = makeParamSlider('contrastLabel', 'contrastTooltip', -50, 50, 1, DEFAULTS.contrast, fmtSigned, (v) => (state.contrast = v));
 const saturationSlider = makeParamSlider('saturationLabel', 'saturationTooltip', -100, 100, 1, DEFAULTS.saturation, fmtSigned, (v) => (state.saturation = v));
@@ -156,6 +160,7 @@ const blackSlider = makeParamSlider('blackLabel', 'blackTooltip', 0, 20, 1, DEFA
 
 const detailSliders: SliderHandle[] = [
   smoothingSlider,
+  noiseSuppressionSlider,
   exposureSlider,
   contrastSlider,
   saturationSlider,
@@ -270,12 +275,30 @@ function bothLoaded(): boolean {
   return state.source != null && state.reference != null;
 }
 
+/**
+ * ノイズ抑制スライダーの有効/無効を追従させる（§4.4・§6.0）。
+ * モード A（ナチュラル）は HM を使わないため常に無効＋理由ツールチップを表示する。
+ * 画像未投入時は他の詳細スライダーと同様に理由なしで無効化する。
+ */
+function updateNoiseSuppressionDisabled(): void {
+  if (!bothLoaded()) {
+    noiseSuppressionSlider.setDisabled(true);
+    return;
+  }
+  const modeDisabled = state.mode === 'A';
+  noiseSuppressionSlider.setDisabled(modeDisabled, modeDisabled ? 'noiseSuppressionDisabledReason' : undefined);
+}
+
 function updateUiState(): void {
   const both = bothLoaded();
   const enabled = both;
   modeSegment.setDisabled(!enabled);
   strengthSlider.setDisabled(!enabled);
-  for (const s of detailSliders) s.setDisabled(!enabled);
+  for (const s of detailSliders) {
+    if (s === noiseSuppressionSlider) continue; // モード連動の理由付き無効化は下で個別処理
+    s.setDisabled(!enabled);
+  }
+  updateNoiseSuppressionDisabled();
   resetBtn.classList.toggle('is-disabled', !enabled);
   (resetBtn as HTMLButtonElement).disabled = !enabled;
   exportBar.setDisabled(!enabled || state.currentLut == null);
@@ -350,6 +373,7 @@ function buildOptions(): GenerateLutOptions {
     size: exportBar.getSize(),
     strength: state.strength,
     smoothing: state.smoothing,
+    noiseSuppression: state.noiseSuppression,
     manual: {
       ...NEUTRAL_ADJUSTMENTS,
       exposure: state.exposure,
@@ -469,6 +493,7 @@ async function savePng(): Promise<void> {
 function resetAdjustments(): void {
   state.strength = DEFAULTS.strength;
   state.smoothing = DEFAULTS.smoothing;
+  state.noiseSuppression = DEFAULTS.noiseSuppression;
   state.exposure = DEFAULTS.exposure;
   state.contrast = DEFAULTS.contrast;
   state.saturation = DEFAULTS.saturation;
@@ -478,6 +503,7 @@ function resetAdjustments(): void {
 
   strengthSlider.setValue(DEFAULTS.strength, true);
   smoothingSlider.setValue(DEFAULTS.smoothing, true);
+  noiseSuppressionSlider.setValue(DEFAULTS.noiseSuppression, true);
   exposureSlider.setValue(DEFAULTS.exposure, true);
   contrastSlider.setValue(DEFAULTS.contrast, true);
   saturationSlider.setValue(DEFAULTS.saturation, true);

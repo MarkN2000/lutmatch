@@ -35,6 +35,72 @@ export const HM_BINS = 256;
  */
 export const HM_RESIDUAL_SMOOTH_SIGMA = 2;
 
+/**
+ * ノイズ抑制スライダー値 s(0–100) → 残差平滑化の σ（ビン単位・§5.3）。
+ * `σ(s) = HM_RESIDUAL_SMOOTH_SIGMA × 2^(s/25)`。s=0 で σ=2（現行の固定値）、
+ * s=100 で σ=32。s が大きいほどスペックル抑制は強く、Reference 追従は甘くなる。
+ */
+export function noiseSuppressionSigma(s: number): number {
+  return HM_RESIDUAL_SMOOTH_SIGMA * 2 ** (s / 25);
+}
+
+/**
+ * ノイズ抑制スライダー値 s(0–100) → カーブ傾き上限 S_max（§5.3）。
+ * `S_max(s) = 2^(4(1−s/100))`。s=0 で 16（実質無効）、s=100 で 1（恒等＋オフセットへ漸近）。
+ * s≤0 では傾きクランプ自体をスキップする（呼び出し側の責務）。
+ */
+export function noiseSuppressionSlopeMax(s: number): number {
+  return 2 ** (4 * (1 - s / 100));
+}
+
+/**
+ * HM カーブの傾き上限クランプ（CLAHE 式再分配・§5.3・ノイズ抑制）。
+ *
+ * カーブノード y[]（長さ HM_BINS+1・x 間隔 Δx=1/HM_BINS）の微分
+ * `d[i]=y[i+1]−y[i]`（単調化済み入力ゆえ ≥0）を上限 `cap=S_max·Δx` でクリップし、
+ * 超過分の合計 E を全区間へ均等再分配する（CLAHE のクリップリミット再分配と同型）。
+ * `d≥0` を保つため単調非減少は自動的に維持され、総上昇量 T=Σd も保存される（端点不変）。
+ *
+ * 【実行可能性の不変条件】y は [0,1] 内の単調カーブなので総上昇量 T ≤ 1。
+ * S_max ≥ 1（s≤100）ゆえ cap·M = S_max ≥ T（M=HM_BINS=区間数）。すなわち総上昇量は
+ * 常に上限内へ収められ、再分配は必ず収束可能。
+ *
+ * 【反復】再分配で cap を再び超える区間が出るため 2〜3 回反復する。最終回の再分配後は
+ * cap の微小超過が残り得るが許容する（後段の残差平滑化がさらに丸める）。
+ *
+ * @param y カーブノード（破壊的に更新）
+ * @param sMax 傾き上限 S_max（≥1 を前提）
+ */
+export function clampCurveSlope(y: Float64Array, sMax: number): void {
+  const M = HM_BINS; // 区間数（微分の本数）。
+  const dx = 1 / M;
+  const cap = sMax * dx;
+
+  // 微分 d[i]=y[i+1]−y[i]（i=0..M−1）。
+  const d = new Float64Array(M);
+  for (let i = 0; i < M; i++) d[i] = y[i + 1] - y[i];
+
+  const ITERATIONS = 3;
+  for (let it = 0; it < ITERATIONS; it++) {
+    // 上限 cap でクリップし、超過分の合計 E を集める。
+    let excess = 0;
+    for (let i = 0; i < M; i++) {
+      if (d[i] > cap) {
+        excess += d[i] - cap;
+        d[i] = cap;
+      }
+    }
+    if (excess <= 0) break; // 全区間 cap 以下 → 完了。
+    // E を全区間へ均等再分配（総和＝総上昇量を保存）。
+    const add = excess / M;
+    for (let i = 0; i < M; i++) d[i] += add;
+    // 最終回は再分配のみで打ち切り（cap の微小超過は許容）。
+  }
+
+  // y[0] から累積和で再構成（端点＝総上昇量が保存される）。
+  for (let i = 0; i < M; i++) y[i + 1] = y[i] + d[i];
+}
+
 /** 1 チャンネルのリマップカーブ。ガンマ空間の等間隔ノード y[i]（x=i/HM_BINS）を持つ。 */
 export interface ChannelCurve {
   /** ノード出力値（長さ HM_BINS+1、x=i/HM_BINS のガンマ空間値）。 */
@@ -131,8 +197,7 @@ function invCdf(cdf: Float64Array, p: number): number {
  * - 残差平滑化なので恒等入力（y=x）は厳密に不変 → 同一性テストを壊さない。
  * - 境界は複製（端点残差を延長）。畳み込み後に累積 max で単調非減少を再保証する。
  */
-function smoothResidual(y: Float64Array): void {
-  const sigma = HM_RESIDUAL_SMOOTH_SIGMA;
+function smoothResidual(y: Float64Array, sigma: number): void {
   if (sigma <= 0) return;
   const N = HM_BINS;
   const radius = Math.max(1, Math.ceil(sigma * 3));
@@ -171,8 +236,16 @@ function smoothResidual(y: Float64Array): void {
 
 /**
  * Source→Reference のチャンネルリマップカーブを構築する（単調非減少を保証）。
+ *
+ * 処理順（§5.3）：CDF 写像 → 単調化 → 傾きクランプ（CLAHE 式）→ 残差平滑化 → 単調化再保証。
+ * `noiseSuppression`（s・0–100）が σ とクランプ上限 S_max を同時に駆動する。
+ * **s≤0 のときは傾きクランプを完全スキップ**し、σ=2・クランプなしの現行挙動と一致する。
  */
-function buildChannelCurve(cdfS: Float64Array, cdfR: Float64Array): ChannelCurve {
+function buildChannelCurve(
+  cdfS: Float64Array,
+  cdfR: Float64Array,
+  noiseSuppression: number,
+): ChannelCurve {
   const y = new Float64Array(HM_BINS + 1);
   let prev = -Infinity;
   for (let i = 0; i <= HM_BINS; i++) {
@@ -182,8 +255,15 @@ function buildChannelCurve(cdfS: Float64Array, cdfR: Float64Array): ChannelCurve
     y[i] = mapped < prev ? prev : mapped;
     prev = y[i];
   }
-  // 暗部の傾きスパイク抑制：残差平滑化（恒等は不変・単調性は再保証）。
-  smoothResidual(y);
+  // 傾き上限クランプ（CLAHE 式）。s≤0 では完全スキップして現行挙動と一致させる。
+  // 恒等カーブ（傾き一定 Δx ≤ cap）はクランプで不変。
+  if (noiseSuppression > 0) {
+    clampCurveSlope(y, noiseSuppressionSlopeMax(noiseSuppression));
+  }
+  // 暗部の傾きスパイク抑制：残差平滑化（σ(s)・恒等は不変・単調性は再保証）。
+  // クランプで生じた折れ点も後段の平滑化が丸める。正規化ガウシアンは微分の最大値を
+  // 増やさないため、平滑化後も傾き上限がほぼ保たれる（境界複製由来の微小違反はあり得る）。
+  smoothResidual(y, noiseSuppressionSigma(noiseSuppression));
   const loSlope = (y[1] - y[0]) * HM_BINS;
   const hiSlope = (y[HM_BINS] - y[HM_BINS - 1]) * HM_BINS;
   return { y, loSlope, hiSlope };
@@ -193,17 +273,19 @@ function buildChannelCurve(cdfS: Float64Array, cdfR: Float64Array): ChannelCurve
  * HM カーブ（3 チャンネル）を構築する。
  * @param srcSamples Source のパック RGB サンプル（リニア）
  * @param refSamples Reference のパック RGB サンプル（リニア）
+ * @param noiseSuppression ノイズ抑制 s（0–100・§5.3）。0 でクランプなし・σ=2。
  */
 export function buildHistMatch(
   srcSamples: Float32Array,
   refSamples: Float32Array,
+  noiseSuppression: number,
 ): HistMatchCurves {
   const cdfS = buildCdfs(srcSamples);
   const cdfR = buildCdfs(refSamples);
   return [
-    buildChannelCurve(cdfS[0], cdfR[0]),
-    buildChannelCurve(cdfS[1], cdfR[1]),
-    buildChannelCurve(cdfS[2], cdfR[2]),
+    buildChannelCurve(cdfS[0], cdfR[0], noiseSuppression),
+    buildChannelCurve(cdfS[1], cdfR[1], noiseSuppression),
+    buildChannelCurve(cdfS[2], cdfR[2], noiseSuppression),
   ];
 }
 

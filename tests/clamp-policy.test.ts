@@ -75,12 +75,12 @@ describe('中間段で 0–1 クランプしない（§5.4 複合モード C）'
     const refStats = computeColorStats(refSamples);
     const n = Math.min(srcStats.count, refStats.count);
 
-    const hm1 = buildHistMatch(srcSamples, refSamples);
+    const hm1 = buildHistMatch(srcSamples, refSamples, 0);
     const s1 = mapNoClamp(srcSamples, (r, g, b, o) => applyHistMatch(hm1, r, g, b, o));
     const s1Stats = computeColorStats(s1);
     const mkl = buildMkl(s1Stats, refStats, n);
     const s2 = mapNoClamp(s1, (r, g, b, o) => applyLinearTransform(mkl.transform, r, g, b, o));
-    const hm2 = buildHistMatch(s2, refSamples);
+    const hm2 = buildHistMatch(s2, refSamples, 0);
 
     const refApply = (r: number, g: number, b: number, out: Vec3): void => {
       const t1: Vec3 = [0, 0, 0];
@@ -91,7 +91,7 @@ describe('中間段で 0–1 クランプしない（§5.4 複合モード C）'
     };
 
     // pipeline の実装（複合モード C）。
-    const match = buildMatchTransform('C', srcSamples, refSamples);
+    const match = buildMatchTransform('C', srcSamples, refSamples, 0);
     expect(match.fallback).toBe(false);
 
     // 入力群：格子相当の [0,1] リニア値に加え、明示的に範囲外（<0 / >1）を含める。
@@ -141,6 +141,7 @@ describe('中間段で 0–1 クランプしない（§5.4 複合モード C）'
       size: n,
       strength: 100,
       smoothing: 0,
+      noiseSuppression: 0,
       manual: { ...NEUTRAL_ADJUSTMENTS },
       sample: SAMPLE,
       // 減衰を実質無効化し、複合変換そのものの性質（範囲外経由後の単調性）を見る。
@@ -175,6 +176,7 @@ describe('中間段で 0–1 クランプしない（§5.4 複合モード C）'
       size: n,
       strength: 100,
       smoothing: 0,
+      noiseSuppression: 0,
       manual: { ...NEUTRAL_ADJUSTMENTS },
       sample: SAMPLE,
       d0: 1e9,

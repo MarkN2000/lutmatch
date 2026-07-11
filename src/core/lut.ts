@@ -272,7 +272,12 @@ export function generateLut(
 
   const srcSamples = extractValidSamples(srcPixels, channels, options.sample);
   const refSamples = extractValidSamples(refPixels, channels, options.sample);
-  const match = buildMatchTransform(options.mode, srcSamples, refSamples);
+  const match = buildMatchTransform(
+    options.mode,
+    srcSamples,
+    refSamples,
+    options.noiseSuppression,
+  );
 
   const auto = new Float32Array(n * n * n * 3);
   const srcMean: Vec3 = match.srcMean;

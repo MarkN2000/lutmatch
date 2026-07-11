@@ -35,7 +35,12 @@ export interface SliderHandle {
   getValue(): number;
   /** 値を設定（silent=true で onInput を発火しない）。 */
   setValue(value: number, silent?: boolean): void;
-  setDisabled(disabled: boolean): void;
+  /**
+   * 有効/無効を切り替える。`reasonKey` を渡すと無効中のツールチップを
+   * その理由文言に差し替える（例: モード A では効果がない旨）。
+   * 無効化解除時（disabled=false）は自動的に通常のツールチップへ戻る。
+   */
+  setDisabled(disabled: boolean, reasonKey?: MessageKey): void;
 }
 
 export function createSlider(config: SliderConfig): SliderHandle {
@@ -57,17 +62,21 @@ export function createSlider(config: SliderConfig): SliderHandle {
   append(root, head, range);
 
   let value = config.value;
+  // 無効化理由（disabled 中のみ有効）。指定時はツールチップを理由文言に差し替える。
+  let disabledReasonKey: MessageKey | null = null;
+
+  const tooltipKey = (): MessageKey => disabledReasonKey ?? config.tooltipKey;
 
   const applyAria = (): void => {
     const text = `${t(config.labelKey)}: ${config.format(value)}`;
     range.setAttribute('aria-label', text);
-    range.title = t(config.tooltipKey);
+    range.title = t(tooltipKey());
     valueBtn.setAttribute('aria-label', `${t(config.labelKey)} を直接入力`);
   };
 
   const refreshText = (): void => {
     label.textContent = t(config.labelKey);
-    label.title = t(config.tooltipKey);
+    label.title = t(tooltipKey());
     valueBtn.textContent = config.format(value);
     applyAria();
   };
@@ -138,10 +147,12 @@ export function createSlider(config: SliderConfig): SliderHandle {
     element: root,
     getValue: () => value,
     setValue: (v, silent) => commitValue(v, silent),
-    setDisabled: (disabled) => {
+    setDisabled: (disabled, reasonKey) => {
       range.disabled = disabled;
       valueBtn.disabled = disabled;
       root.classList.toggle('is-disabled', disabled);
+      disabledReasonKey = disabled ? (reasonKey ?? null) : null;
+      refreshText();
     },
   };
 }

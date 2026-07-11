@@ -22,6 +22,7 @@ const OPTIONS: GenerateLutOptions = {
   size: 33,
   strength: 100,
   smoothing: 0,
+  noiseSuppression: 0,
   manual: NEUTRAL_ADJUSTMENTS,
   sample: { alphaThreshold: 0.5, blackThreshold: 0 },
 };
