@@ -19,6 +19,7 @@ import { createDropzone, type DropzoneHandle } from './ui/dropzone.ts';
 import { createModeSegment } from './ui/segment.ts';
 import { createSlider, type SliderHandle } from './ui/slider.ts';
 import { createAccordion } from './ui/accordion.ts';
+import { createCurves } from './ui/curves.ts';
 import { createPreview } from './ui/preview.ts';
 import { createExportBar } from './ui/exportbar.ts';
 import { createToastHost } from './ui/toast.ts';
@@ -28,7 +29,7 @@ import { renderResultPng } from './ui/export-png.ts';
 import { loadImage, ImageLoadError, type LoadedImage } from './io/image.ts';
 import { MatchWorkerClient, SupersededError } from './worker/client.ts';
 import type { GenerateLutRequestPayload } from './worker/protocol.ts';
-import { NEUTRAL_ADJUSTMENTS, srgbToLinear, type GenerateLutOptions, type MatchMode } from './core/index.ts';
+import { CURVE_BINS, HIST_BINS, NEUTRAL_ADJUSTMENTS, srgbToLinear, type GenerateLutOptions, type MatchMode } from './core/index.ts';
 
 // ============================================================
 // 定数・既定値（§4.4）
@@ -149,6 +150,13 @@ const strengthSlider = createSlider({
 // ノイズ抑制は常時表示（強度の隣・§6.0）。モード A では無効化される（updateNoiseSuppressionDisabled）。
 const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
 
+// カーブエディタ（独立アコーディオン・既定閉／§5.7・§6.1）。ノイズ抑制と「詳細調整」の間に置く。
+const curves = createCurves();
+// 編集（点追加・ドラッグ中の move ごとも含む）→ デバウンス再計算。
+curves.onChange(() => scheduleRecompute());
+// ドラッグ中は既存スライダーと同じ経路で Canvas 2D フォールバックの draft/full 品質を切り替える。
+curves.onDragState(setDragState);
+
 const accordion = createAccordion('detailsTitle');
 
 // 詳細 7 項目（§4.4・§6.0）。
@@ -175,7 +183,7 @@ const resetBtn = el('button', 'btn btn--ghost reset-btn');
 resetBtn.type = 'button';
 resetBtn.addEventListener('click', resetAdjustments);
 
-append(controlsBlock, modeSection, strengthSlider.element, noiseSuppressionSlider.element, accordion.element, resetBtn);
+append(controlsBlock, modeSection, strengthSlider.element, noiseSuppressionSlider.element, curves.element, accordion.element, resetBtn);
 
 // ---- 通知（トースト）・ヘルプ ----
 // トーストはプレビューのバックエンド切替コールバックが参照するため先に生成する。
@@ -296,6 +304,7 @@ function updateUiState(): void {
   modeSegment.setDisabled(!enabled);
   strengthSlider.setDisabled(!enabled);
   for (const s of detailSliders) s.setDisabled(!enabled);
+  curves.setDisabled(!enabled);
   updateNoiseSuppressionDisabled();
   resetBtn.classList.toggle('is-disabled', !enabled);
   (resetBtn as HTMLButtonElement).disabled = !enabled;
@@ -372,6 +381,7 @@ function buildOptions(): GenerateLutOptions {
     strength: state.strength,
     smoothing: state.smoothing,
     noiseSuppression: state.noiseSuppression,
+    curves: curves.getEdits(),
     manual: {
       ...NEUTRAL_ADJUSTMENTS,
       exposure: state.exposure,
@@ -417,6 +427,10 @@ async function recompute(): Promise<void> {
     state.currentLut = result.lut;
     state.currentLutSize = result.size;
     preview.setLut(result.lut, result.size);
+    // カーブパネルへ最新の実効カーブ F と Source/結果ヒストグラムを差し込む（supersede 破棄経路では
+    // 先に SupersededError で return するため到達しない）。
+    curves.setBaseCurves(result.effectiveCurves, CURVE_BINS);
+    curves.setHistograms(result.histSource, result.histResult, HIST_BINS);
     preview.render(state.activeDrags > 0 ? 'draft' : 'full');
     preview.setComputing(false);
     exportBar.setDisabled(false);
@@ -508,6 +522,9 @@ function resetAdjustments(): void {
   temperatureSlider.setValue(DEFAULTS.temperature, true);
   tintSlider.setValue(DEFAULTS.tint, true);
   blackSlider.setValue(DEFAULTS.blackProtection, true);
+  // カーブ編集も破棄する。silent で onChange を発火させず、末尾の単一 scheduleRecompute に集約する
+  // （二重再計算を防止）。
+  curves.reset({ silent: true });
 
   scheduleRecompute();
 }
