@@ -537,3 +537,112 @@ describe('残差カーブ統合（§5.7）', () => {
     expect(histResult).toHaveLength(4 * HIST_BINS);
   });
 });
+
+describe('恒等基底：Reference なしの手動 LUT 作成（フェーズ1）', () => {
+  const src = makeLinearRgba(4096, 4242);
+  const ref = makeLinearRgba(4096, 4243);
+
+  // 恒等経路は strength / smoothing / mode / reference を無視するため、これらに非自明な値
+  // （strength:80・smoothing:20）を入れても結果が恒等のまま不変であることも兼ねて検証する。
+  function idOpts(overrides: Partial<GenerateLutOptions> = {}): GenerateLutOptions {
+    return baseOptions({ mode: 'C', size: 17, strength: 80, smoothing: 20, ...overrides });
+  }
+
+  it('①手動ニュートラル・カーブなしで LUT が厳密恒等（Float32 精度）・fallback=false', () => {
+    const res = generateLut(src, null, 4, idOpts());
+    expect(res.fallback).toBe(false);
+    const n = res.size;
+    const inv = 1 / (n - 1);
+    let idx = 0;
+    for (let b = 0; b < n; b++) {
+      for (let g = 0; g < n; g++) {
+        for (let r = 0; r < n; r++) {
+          // 主ループの基底 rgb=[gr,gg,gb] を Float32 化した値と厳密一致（丸め以外の差はゼロ）。
+          expect(res.lut[idx++]).toBe(Math.fround(r * inv));
+          expect(res.lut[idx++]).toBe(Math.fround(g * inv));
+          expect(res.lut[idx++]).toBe(Math.fround(b * inv));
+        }
+      }
+    }
+  });
+
+  it('②手動調整（露出+1EV）が恒等基底に乗る（strength:0 の実参照経路とビット一致）', () => {
+    // strength:0 の Reference あり経路は base=Identity 格子（auto を 0 倍）となり、
+    // 「恒等格子に手動だけ適用」した参照そのもの（既存テストで確立済み）。LUT はサンプルに
+    // 依存しないため、恒等経路の LUT はこの参照とビット一致するはず。
+    const manual = { ...NEUTRAL_ADJUSTMENTS, exposure: 1 };
+    const idPath = generateLut(src, null, 4, idOpts({ manual })).lut;
+    const refPath = generateLut(
+      src,
+      ref,
+      4,
+      baseOptions({ mode: 'C', size: 17, strength: 0, smoothing: 0, manual }),
+    ).lut;
+    expect(idPath).toEqual(refPath);
+
+    // 併せて中間調グレーが露出+1EV でリニア約2倍という物理的意味も確認。
+    const n = 17;
+    const mid = 8;
+    const di = (mid + mid * n + mid * n * n) * 3;
+    expect(srgbToLinear(idPath[di])).toBeCloseTo(2 * srgbToLinear(0.5), 5);
+  });
+
+  it('③カーブ残差（master +0.1 全域）が恒等基底に乗る／空カーブは①とビット一致', () => {
+    const emptyEdits: CurveEdits = { master: [], r: [], g: [], b: [] };
+    const plain = generateLut(src, null, 4, idOpts()).lut;
+    const empty = generateLut(src, null, 4, idOpts({ curves: emptyEdits })).lut;
+    expect(empty).toEqual(plain); // 空 CurveEdits はケース①とビット一致。
+
+    const curves: CurveEdits = {
+      master: [{ x: 0, dy: 0.1 }, { x: 1, dy: 0.1 }],
+      r: [],
+      g: [],
+      b: [],
+    };
+    const idPath = generateLut(src, null, 4, idOpts({ curves })).lut;
+    const refPath = generateLut(
+      src,
+      ref,
+      4,
+      baseOptions({ mode: 'C', size: 17, strength: 0, smoothing: 0, curves }),
+    ).lut;
+    expect(idPath).toEqual(refPath);
+
+    // 中間調グレーが恒等基底 0.5 から +0.1 されている（非クランプ域）。
+    const n = 17;
+    const mid = 8;
+    const di = (mid + mid * n + mid * n * n) * 3;
+    expect(idPath[di]).toBeCloseTo(0.6, 4);
+  });
+
+  it('④実効カーブ・ヒストグラムが正しい長さで返り、blackThreshold=0 で暗部が充填される', () => {
+    // 暗部（リニア輝度<0.1）と中間調を半々に混ぜた合成データ。blackThreshold=0.1 を渡しても
+    // 恒等経路は 0 扱いに上書きするため、暗部サンプルがヒストグラムのシャドウ域を充填する。
+    const count = 4096;
+    const px = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const lin = i < count / 2 ? 0.01 : 0.5; // 暗部（本来は除外対象）と中間調。
+      px[i * 4] = lin;
+      px[i * 4 + 1] = lin;
+      px[i * 4 + 2] = lin;
+      px[i * 4 + 3] = 1;
+    }
+    const sample = { alphaThreshold: 0.5, blackThreshold: 0.1 };
+    const res = generateLut(px, null, 4, idOpts({ sample }));
+    expect(res.effectiveCurves).toHaveLength(4 * CURVE_BINS);
+    expect(res.histSource).toHaveLength(4 * HIST_BINS);
+    expect(res.histResult).toHaveLength(4 * HIST_BINS);
+
+    // R ブロックのシャドウ域（低位ビン）に度数があること＝暗部が除外されていない。
+    const shadowSum = (hist: Float32Array): number => {
+      let s = 0;
+      for (let i = 0; i < 32; i++) s += hist[i]; // R ブロック先頭32ビン。
+      return s;
+    };
+    expect(shadowSum(res.histSource)).toBeGreaterThan(0);
+
+    // 対照：blackThreshold を尊重する Reference あり経路では暗部が除外されシャドウが空。
+    const honored = generateLut(px, px, 4, baseOptions({ mode: 'C', size: 17, sample }));
+    expect(shadowSum(honored.histSource)).toBe(0);
+  });
+});

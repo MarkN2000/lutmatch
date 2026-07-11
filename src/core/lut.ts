@@ -12,6 +12,11 @@
  *   7. 0–1 クランプ（最終のみ）
  * ループ後：実効カーブ F（base から）・Source/結果ヒストグラムを計算して結果に含める。
  *
+ * Reference なし（`refPixels == null`）＝恒等基底の手動 LUT 作成モード：手順 1〜4 をすべて
+ * スキップし、主ループの基底を格子座標そのもの（strength 非依存の厳密恒等）とする。これは
+ * 「smoothing 等が no-op だから省略」ではなく、恒等経路を「純恒等＋手動＋カーブ」と定義する
+ * 設計判断である（smoothGrid は複製境界のため恒等格子を厳密には保存しない）。
+ *
  * LUT データは長さ N³×3、**R が最速で回る**（index = (r + g·N + b·N²)·3）、値はガンマ RGB。
  */
 
@@ -285,70 +290,89 @@ export function trilinearSample(
  * Source / Reference のリニア画素から最終 LUT を生成する（§5.4〜§5.5 全工程）。
  *
  * @param srcPixels Source のリニア RGB(A) 画素配列
- * @param refPixels Reference のリニア RGB(A) 画素配列
+ * @param refPixels Reference のリニア RGB(A) 画素配列。`null` なら自動マッチを行わず
+ *                  恒等基底の手動 LUT を生成する（手順 1〜4 スキップ・`fallback` は常に false）。
  * @param channels 3=RGB / 4=RGBA
  * @param options モード・サイズ・強度・スムージング・手動調整・抽出条件
  * @returns LUT（Float32Array・R 最速・ガンマ RGB）とフォールバック警告フラグ
  */
 export function generateLut(
   srcPixels: Float32Array,
-  refPixels: Float32Array,
+  refPixels: Float32Array | null,
   channels: ChannelCount,
   options: GenerateLutOptions,
 ): GenerateLutResult {
   const n = options.size;
   const d0 = options.d0 ?? MAHALANOBIS_D0;
+  const inv = n > 1 ? 1 / (n - 1) : 0;
+  const hasRef = refPixels != null;
 
-  const srcSamples = extractValidSamples(srcPixels, channels, options.sample);
-  const refSamples = extractValidSamples(refPixels, channels, options.sample);
-  const match = buildMatchTransform(
-    options.mode,
-    srcSamples,
-    refSamples,
-    options.noiseSuppression,
+  // srcSamples は実効カーブ・ヒストグラムに常に必要なので恒等経路でも抽出する。
+  // Reference なし（＝統計マッチが存在しない）のときはブラック保護を 0 扱いにする：
+  // 無効化されたスライダーの既定値（知覚5%）が、対応する保護対象を持たないまま
+  // ヒストグラム・実効カーブの表示ドメインを黙って切り詰めてしまうのを防ぐため。
+  // Reference ありのときは従来どおり options.sample をそのまま渡す（＝ゴールデン不変）。
+  const srcSamples = extractValidSamples(
+    srcPixels,
+    channels,
+    hasRef ? options.sample : { ...options.sample, blackThreshold: 0 },
   );
 
-  const auto = new Float32Array(n * n * n * 3);
-  const srcMean: Vec3 = match.srcMean;
-  const srcCovInv: Mat3 = match.srcCovInv;
+  // Reference ありのときのみ自動マッチ格子（auto）を構築する。この分岐内の浮動小数演算列は
+  // 従来と完全同一（分岐で囲むだけ）であり、既存ゴールデンとビット一致する。
+  let auto: Float32Array | null = null;
+  let fallback = false;
+  if (hasRef) {
+    const refSamples = extractValidSamples(refPixels, channels, options.sample);
+    const match = buildMatchTransform(
+      options.mode,
+      srcSamples,
+      refSamples,
+      options.noiseSuppression,
+    );
+    fallback = match.fallback;
 
-  const matched: Vec3 = [0, 0, 0];
-  const linGrid: Vec3 = [0, 0, 0];
-  const inv = n > 1 ? 1 / (n - 1) : 0;
+    auto = new Float32Array(n * n * n * 3);
+    const srcMean: Vec3 = match.srcMean;
+    const srcCovInv: Mat3 = match.srcCovInv;
 
-  // 1+2：格子適用 → マハラノビス減衰。結果はガンマ RGB で auto に格納。
-  for (let ib = 0; ib < n; ib++) {
-    const gb = ib * inv;
-    for (let ig = 0; ig < n; ig++) {
-      const gg = ig * inv;
-      for (let ir = 0; ir < n; ir++) {
-        const gr = ir * inv;
-        // 格子点をリニア化。
-        linGrid[0] = srgbToLinear(gr);
-        linGrid[1] = srgbToLinear(gg);
-        linGrid[2] = srgbToLinear(gb);
-        // f を適用（リニア→リニア）→ ガンマへ。
-        match.apply(linGrid[0], linGrid[1], linGrid[2], matched);
-        let or = linearToSrgb(matched[0]);
-        let og = linearToSrgb(matched[1]);
-        let ob = linearToSrgb(matched[2]);
-        // マハラノビス減衰：リニア格子点を Source リニア統計で測る。
-        const w = attenuationWeight(mahalanobisSq(srcCovInv, linGrid, srcMean), d0);
-        if (w > 0) {
-          or += (gr - or) * w;
-          og += (gg - og) * w;
-          ob += (gb - ob) * w;
+    const matched: Vec3 = [0, 0, 0];
+    const linGrid: Vec3 = [0, 0, 0];
+
+    // 1+2：格子適用 → マハラノビス減衰。結果はガンマ RGB で auto に格納。
+    for (let ib = 0; ib < n; ib++) {
+      const gb = ib * inv;
+      for (let ig = 0; ig < n; ig++) {
+        const gg = ig * inv;
+        for (let ir = 0; ir < n; ir++) {
+          const gr = ir * inv;
+          // 格子点をリニア化。
+          linGrid[0] = srgbToLinear(gr);
+          linGrid[1] = srgbToLinear(gg);
+          linGrid[2] = srgbToLinear(gb);
+          // f を適用（リニア→リニア）→ ガンマへ。
+          match.apply(linGrid[0], linGrid[1], linGrid[2], matched);
+          let or = linearToSrgb(matched[0]);
+          let og = linearToSrgb(matched[1]);
+          let ob = linearToSrgb(matched[2]);
+          // マハラノビス減衰：リニア格子点を Source リニア統計で測る。
+          const w = attenuationWeight(mahalanobisSq(srcCovInv, linGrid, srcMean), d0);
+          if (w > 0) {
+            or += (gr - or) * w;
+            og += (gg - og) * w;
+            ob += (gb - ob) * w;
+          }
+          const di = gridIndex(ir, ig, ib, n);
+          auto[di] = or;
+          auto[di + 1] = og;
+          auto[di + 2] = ob;
         }
-        const di = gridIndex(ir, ig, ib, n);
-        auto[di] = or;
-        auto[di + 1] = og;
-        auto[di + 2] = ob;
       }
     }
-  }
 
-  // 3：平滑化。
-  smoothGrid(auto, n, options.smoothing);
+    // 3：平滑化。
+    smoothGrid(auto, n, options.smoothing);
+  }
 
   // 残差カーブの準備（非空時のみ・§5.7）。空/未指定なら加算コードを一切通さず、
   // 既存の最終ループと完全に同一のコードパスになる（＝ゴールデンとビット一致）。
@@ -379,10 +403,17 @@ export function generateLut(
       for (let ir = 0; ir < n; ir++) {
         const gr = ir * inv;
         const di = gridIndex(ir, ig, ib, n);
-        // 強度ミックス：Identity（格子座標）と自動マッチ結果をブレンド。
-        rgb[0] = gr + (auto[di] - gr) * strength;
-        rgb[1] = gg + (auto[di + 1] - gg) * strength;
-        rgb[2] = gb + (auto[di + 2] - gb) * strength;
+        if (hasRef) {
+          // 強度ミックス：Identity（格子座標）と自動マッチ結果をブレンド。
+          rgb[0] = gr + (auto![di] - gr) * strength;
+          rgb[1] = gg + (auto![di + 1] - gg) * strength;
+          rgb[2] = gb + (auto![di + 2] - gb) * strength;
+        } else {
+          // Reference なし：厳密恒等（格子座標そのもの・strength 非依存）を基底とする。
+          rgb[0] = gr;
+          rgb[1] = gg;
+          rgb[2] = gb;
+        }
         // 手動調整（フル効果）。
         applyManual(rgb, options.manual);
         // base 保存（残差前・クランプ前）。別配列への書き込みのみで lut 計算は不変。
@@ -418,7 +449,7 @@ export function generateLut(
   return {
     lut,
     size: n,
-    fallback: match.fallback,
+    fallback,
     effectiveCurves,
     histSource,
     histResult,
