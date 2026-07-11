@@ -146,11 +146,13 @@ const strengthSlider = createSlider({
   onDragState: setDragState,
 });
 
+// ノイズ抑制は常時表示（強度の隣・§6.0）。モード A では無効化される（updateNoiseSuppressionDisabled）。
+const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
+
 const accordion = createAccordion('detailsTitle');
 
-// 詳細 8 項目（§4.4・§6.0）。
+// 詳細 7 項目（§4.4・§6.0）。
 const smoothingSlider = makeParamSlider('smoothingLabel', 'smoothingTooltip', 0, 100, 1, DEFAULTS.smoothing, (v) => `${Math.round(v)}`, (v) => (state.smoothing = v));
-const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
 const exposureSlider = makeParamSlider('exposureLabel', 'exposureTooltip', -2, 2, 0.05, DEFAULTS.exposure, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} EV`, (v) => (state.exposure = v));
 const contrastSlider = makeParamSlider('contrastLabel', 'contrastTooltip', -50, 50, 1, DEFAULTS.contrast, fmtSigned, (v) => (state.contrast = v));
 const saturationSlider = makeParamSlider('saturationLabel', 'saturationTooltip', -100, 100, 1, DEFAULTS.saturation, fmtSigned, (v) => (state.saturation = v));
@@ -160,7 +162,6 @@ const blackSlider = makeParamSlider('blackLabel', 'blackTooltip', 0, 20, 1, DEFA
 
 const detailSliders: SliderHandle[] = [
   smoothingSlider,
-  noiseSuppressionSlider,
   exposureSlider,
   contrastSlider,
   saturationSlider,
@@ -174,7 +175,7 @@ const resetBtn = el('button', 'btn btn--ghost reset-btn');
 resetBtn.type = 'button';
 resetBtn.addEventListener('click', resetAdjustments);
 
-append(controlsBlock, modeSection, strengthSlider.element, accordion.element, resetBtn);
+append(controlsBlock, modeSection, strengthSlider.element, noiseSuppressionSlider.element, accordion.element, resetBtn);
 
 // ---- 通知（トースト）・ヘルプ ----
 // トーストはプレビューのバックエンド切替コールバックが参照するため先に生成する。
@@ -278,7 +279,7 @@ function bothLoaded(): boolean {
 /**
  * ノイズ抑制スライダーの有効/無効を追従させる（§4.4・§6.0）。
  * モード A（ナチュラル）は HM を使わないため常に無効＋理由ツールチップを表示する。
- * 画像未投入時は他の詳細スライダーと同様に理由なしで無効化する。
+ * 画像未投入時は他のスライダーと同様に理由なしで無効化する。
  */
 function updateNoiseSuppressionDisabled(): void {
   if (!bothLoaded()) {
@@ -294,10 +295,7 @@ function updateUiState(): void {
   const enabled = both;
   modeSegment.setDisabled(!enabled);
   strengthSlider.setDisabled(!enabled);
-  for (const s of detailSliders) {
-    if (s === noiseSuppressionSlider) continue; // モード連動の理由付き無効化は下で個別処理
-    s.setDisabled(!enabled);
-  }
+  for (const s of detailSliders) s.setDisabled(!enabled);
   updateNoiseSuppressionDisabled();
   resetBtn.classList.toggle('is-disabled', !enabled);
   (resetBtn as HTMLButtonElement).disabled = !enabled;
