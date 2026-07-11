@@ -104,8 +104,8 @@ append(header, brand, headerActions);
 // ---- 入力ブロック ----
 const inputsBlock = el('section', 'panel block-inputs');
 const dzRow = el('div', 'dropzone-row');
-const dropSource: DropzoneHandle = createDropzone('source', (f) => handleFile('source', f));
-const dropReference: DropzoneHandle = createDropzone('reference', (f) => handleFile('reference', f));
+const dropSource: DropzoneHandle = createDropzone('source', (f) => handleFile('source', f), () => clearImage('source'));
+const dropReference: DropzoneHandle = createDropzone('reference', (f) => handleFile('reference', f), () => clearImage('reference'));
 append(dzRow, dropSource.element, dropReference.element);
 
 const sampleBtn = el('button', 'btn btn--ghost sample-btn');
@@ -168,7 +168,20 @@ const temperatureSlider = makeParamSlider('temperatureLabel', 'temperatureToolti
 const tintSlider = makeParamSlider('tintLabel', 'tintTooltip', -100, 100, 1, DEFAULTS.tint, fmtSigned, (v) => (state.tint = v));
 const blackSlider = makeParamSlider('blackLabel', 'blackTooltip', 0, 20, 1, DEFAULTS.blackProtection, (v) => `${Math.round(v)}%`, (v) => (state.blackProtection = v));
 
-const detailSliders: SliderHandle[] = [
+// 有効条件で 2 群に分ける（§4.4 の有効/無効マトリクス）。
+// - 手動群: source があれば有効（恒等基底の手動 LUT 作成でも使う）
+// - 統計群: source && reference のときのみ有効（自動マッチ由来のパラメーター）
+const manualSliders: SliderHandle[] = [
+  exposureSlider,
+  contrastSlider,
+  saturationSlider,
+  temperatureSlider,
+  tintSlider,
+];
+const statSliders: SliderHandle[] = [smoothingSlider, blackSlider];
+
+// DOM への配置は従来の表示順（スムージング → 露出 → … → ブラック保護）を維持する。
+for (const s of [
   smoothingSlider,
   exposureSlider,
   contrastSlider,
@@ -176,8 +189,9 @@ const detailSliders: SliderHandle[] = [
   temperatureSlider,
   tintSlider,
   blackSlider,
-];
-for (const s of detailSliders) append(accordion.body, s.element);
+]) {
+  append(accordion.body, s.element);
+}
 
 const resetBtn = el('button', 'btn btn--ghost reset-btn');
 resetBtn.type = 'button';
@@ -285,13 +299,13 @@ function bothLoaded(): boolean {
 }
 
 /**
- * ノイズ抑制スライダーの有効/無効を追従させる（§4.4・§6.0）。
- * モード A（ナチュラル）は HM を使わないため常に無効＋理由ツールチップを表示する。
- * 画像未投入時は他のスライダーと同様に理由なしで無効化する。
+ * ノイズ抑制スライダーの有効/無効を追従させる（§4.4・§6.0）。二段構え：
+ * - source && reference が揃わない → 統計マッチが存在しないため理由 `needsReferenceReason` で無効
+ * - 両方揃っていてもモード A（ナチュラル）は HM を使わないため理由付きで無効
  */
 function updateNoiseSuppressionDisabled(): void {
   if (!bothLoaded()) {
-    noiseSuppressionSlider.setDisabled(true);
+    noiseSuppressionSlider.setDisabled(true, 'needsReferenceReason');
     return;
   }
   const modeDisabled = state.mode === 'A';
@@ -299,21 +313,31 @@ function updateNoiseSuppressionDisabled(): void {
 }
 
 function updateUiState(): void {
-  const both = bothLoaded();
-  const enabled = both;
-  modeSegment.setDisabled(!enabled);
-  strengthSlider.setDisabled(!enabled);
-  for (const s of detailSliders) s.setDisabled(!enabled);
-  curves.setDisabled(!enabled);
-  updateNoiseSuppressionDisabled();
-  resetBtn.classList.toggle('is-disabled', !enabled);
-  (resetBtn as HTMLButtonElement).disabled = !enabled;
-  exportBar.setDisabled(!enabled || state.currentLut == null);
-  preview.setEnabled(state.source != null);
+  const s = state.source != null; // 手動群のゲート（恒等基底の手動 LUT 作成でも操作可）
+  const both = bothLoaded(); // 統計群のゲート（自動マッチ由来のパラメーター）
 
-  // 誘導ハイライト（片方のみ投入）。
+  // --- s ゲート: 手動 5 スライダー・カーブ・リセット・書き出し ---
+  for (const sl of manualSliders) sl.setDisabled(!s);
+  curves.setDisabled(!s);
+  resetBtn.classList.toggle('is-disabled', !s);
+  (resetBtn as HTMLButtonElement).disabled = !s;
+  exportBar.setDisabled(!s || state.currentLut == null);
+
+  // --- both ゲート＋理由 needsReferenceReason: モード・強度・スムージング・ブラック保護 ---
+  const reason = both ? undefined : 'needsReferenceReason';
+  modeSegment.setDisabled(!both, reason);
+  strengthSlider.setDisabled(!both, reason);
+  for (const sl of statSliders) sl.setDisabled(!both, reason);
+
+  // ノイズ抑制は二段（参考なし → 理由付き無効／モード A → 別理由）。
+  updateNoiseSuppressionDisabled();
+
+  preview.setEnabled(s);
+
+  // 誘導ハイライトとヒント（§6.2）。点滅は「Reference あり・Source なし」の Source 誘導のみ。
   dropSource.setGuiding(state.source == null && state.reference != null);
-  dropReference.setGuiding(state.reference == null && state.source != null);
+  dropReference.setGuiding(false); // Reference の点滅誘導は廃止
+  dropReference.setHint(state.source != null && state.reference == null ? 'referenceOptionalHint' : null);
 }
 
 // ============================================================
@@ -357,6 +381,29 @@ function setImage(role: Role, loaded: LoadedImage): void {
   } else {
     dropReference.setThumbnail(loaded.previewBitmap);
     preview.setReferenceBitmap(loaded.previewBitmap);
+  }
+  updateUiState();
+  scheduleRecompute();
+}
+
+/**
+ * 画像を削除して該当 role を空状態へ戻す（×ボタンから呼ぶ・§4.1）。
+ * 進行中デコードの後勝ちを防ぐため世代を進め、source 削除時は recompute が
+ * 早期 return する前に LUT を明示クリアして残留を防ぐ。
+ */
+function clearImage(role: Role): void {
+  ++state.loadGeneration[role]; // 進行中デコードを後勝ち無効化
+  state[role]?.dispose();
+  state[role] = null;
+  if (role === 'source') {
+    dropSource.setThumbnail(null);
+    preview.setSourceBitmap(null);
+    // recompute は !src で早期 return するため、ここで消さないと LUT が残留する。
+    state.currentLut = null;
+    state.currentLutSize = 0;
+  } else {
+    dropReference.setThumbnail(null);
+    preview.setReferenceBitmap(null);
   }
   updateUiState();
   scheduleRecompute();
@@ -410,13 +457,14 @@ function copyPixels(data: ImageData): GenerateLutRequestPayload['source'] {
 
 async function recompute(): Promise<void> {
   const src = state.source;
+  if (!src) return;
   const ref = state.reference;
-  if (!src || !ref) return;
 
   preview.setComputing(true, 0.05);
   const payload: GenerateLutRequestPayload = {
     source: copyPixels(src.analysisData),
-    reference: copyPixels(ref.analysisData),
+    // reference 未投入時は恒等基底の手動 LUT を生成する（reference は省略）。
+    reference: ref ? copyPixels(ref.analysisData) : undefined,
     options: buildOptions(),
   };
 

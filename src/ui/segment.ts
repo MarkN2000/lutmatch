@@ -25,7 +25,12 @@ export interface SegmentHandle {
   element: HTMLElement;
   getValue(): MatchMode;
   setValue(value: MatchMode, silent?: boolean): void;
-  setDisabled(disabled: boolean): void;
+  /**
+   * 有効/無効を切り替える。`reasonKey` を渡すと無効中のツールチップを
+   * その理由文言に差し替える（例: 参考画像がないと使えない旨）。
+   * 無効化解除時（disabled=false）は自動的に各モードの説明へ戻る。
+   */
+  setDisabled(disabled: boolean, reasonKey?: MessageKey): void;
 }
 
 export function createModeSegment(
@@ -37,6 +42,8 @@ export function createModeSegment(
   root.setAttribute('aria-label', t('modeLabel'));
 
   let value = initial;
+  // 無効化理由（disabled 中のみ有効）。指定時は各ボタン・ルートのツールチップを理由文言に差し替える。
+  let disabledReasonKey: MessageKey | null = null;
   const buttons = new Map<MatchMode, HTMLButtonElement>();
 
   const sync = (): void => {
@@ -104,9 +111,12 @@ export function createModeSegment(
       const btn = buttons.get(opt.value);
       if (btn) {
         btn.textContent = t(opt.nameKey);
-        btn.title = t(opt.descKey);
+        // 無効理由が指定されていればそれを、通常時は各モードの説明をツールチップに表示する。
+        btn.title = disabledReasonKey != null ? t(disabledReasonKey) : t(opt.descKey);
       }
     }
+    // 無効ボタンは hover しても title が出にくいため、ルートにも理由を持たせる。
+    root.title = disabledReasonKey != null ? t(disabledReasonKey) : '';
   };
 
   onLangChange(refreshText);
@@ -121,9 +131,11 @@ export function createModeSegment(
       sync();
       if (!silent) onChange(v);
     },
-    setDisabled: (disabled) => {
+    setDisabled: (disabled, reasonKey) => {
       for (const btn of buttons.values()) btn.disabled = disabled;
       root.classList.toggle('is-disabled', disabled);
+      disabledReasonKey = disabled ? (reasonKey ?? null) : null;
+      refreshText();
     },
   };
 }
