@@ -57,6 +57,13 @@ export const en: Record<MessageKey, string> = {
   blackTooltip: 'Excludes dark pixels from the match to keep deep blacks.',
   resetButton: 'Reset adjustments',
 
+  // ---- Curve editor ----
+  curvesTitle: 'Curves',
+  curvesTabMaster: 'Master',
+  curvesTabsAria: 'Curve channel',
+  curvesReset: 'Reset curves',
+  curvesCanvasAria: 'Curve editor (tap to add a point, drag to edit, double-tap to delete)',
+
   // ---- Preview ----
   tabOriginal: 'Original',
   tabResult: 'Result',

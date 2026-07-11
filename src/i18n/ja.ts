@@ -56,6 +56,13 @@ export const ja = {
   blackTooltip: '指定輝度以下を統計マッチから除外し、締まった黒を保ちます。',
   resetButton: '手動調整をリセット',
 
+  // ---- カーブエディタ（§5.7 / §6.1）----
+  curvesTitle: 'カーブ',
+  curvesTabMaster: 'マスター',
+  curvesTabsAria: 'カーブのチャンネル',
+  curvesReset: 'カーブをリセット',
+  curvesCanvasAria: 'カーブエディタ（点を追加・ドラッグで編集、ダブルタップで削除）',
+
   // ---- プレビュー（§4.5）----
   tabOriginal: '元画像',
   tabResult: '適用後',
