@@ -234,6 +234,7 @@ body {
   gap: 10px;
 }
 .dropzone {
+  position: relative;
   flex: 1;
   min-width: 0;
   border: 1.5px dashed var(--border);
@@ -926,4 +927,43 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   touch-action: none;
+}
+
+/* ---------- ドロップゾーン削除ボタン ---------- */
+/* サムネイル右上に絶対配置。has-image のときのみ表示。
+   見た目の円（::before）は小さく、ボタン自体は --tap（44px）のヒット領域を
+   確保して視覚サイズとタップ領域を分離する。 */
+.dropzone__remove {
+  display: none;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: var(--tap);
+  height: var(--tap);
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.dropzone.has-image .dropzone__remove {
+  display: flex;
+}
+.dropzone__remove::before {
+  content: '';
+  position: absolute;
+  inset: 11px;
+  background: rgba(14, 15, 17, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  z-index: -1;
+}
+.dropzone__remove:hover::before {
+  background: var(--danger);
+  border-color: var(--danger);
 }

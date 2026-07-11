@@ -22,6 +22,9 @@ export const ja = {
   sampleButton: 'サンプル画像で試す',
   guideSource: 'まず元画像を選んでください',
   guideReference: '参考画像を選んでください',
+  removeImageAria: '画像を削除',
+  referenceOptionalHint: '入れると自動で色を合わせます（任意）',
+  needsReferenceReason: '参考画像を入れると使えます',
 
   // ---- 自動マッチ（モード・§4.2）----
   modeLabel: '自動マッチ',

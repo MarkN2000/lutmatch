@@ -24,6 +24,9 @@ export const en: Record<MessageKey, string> = {
   sampleButton: 'Try sample images',
   guideSource: 'Choose a source image first',
   guideReference: 'Now choose a reference image',
+  removeImageAria: 'Remove image',
+  referenceOptionalHint: 'Optional: add to auto-match colors',
+  needsReferenceReason: 'Available when a reference image is added',
 
   // ---- Auto match (modes) ----
   modeLabel: 'Auto match',

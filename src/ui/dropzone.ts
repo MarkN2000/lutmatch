@@ -16,6 +16,11 @@ export interface DropzoneHandle {
   setThumbnail(bitmap: ImageBitmap | null): void;
   /** 誘導ハイライトの ON/OFF（もう一方を促す点滅）。 */
   setGuiding(guiding: boolean): void;
+  /**
+   * ヒント文言の差し替え（例: 「参考画像は任意」の案内）。
+   * null で解除し、既定の優先順位（誘導 > 画像あり > ヒント > 既定）に戻す。
+   */
+  setHint(key: MessageKey | null): void;
 }
 
 const TITLE_KEY: Record<DropzoneRole, MessageKey> = {
@@ -31,6 +36,7 @@ const GUIDE_KEY: Record<DropzoneRole, MessageKey> = {
 export function createDropzone(
   role: DropzoneRole,
   onFile: (file: File) => void,
+  onRemove?: () => void,
 ): DropzoneHandle {
   const root = el('div', 'dropzone');
   root.dataset.role = role;
@@ -49,16 +55,28 @@ export function createDropzone(
   fileInput.accept = 'image/jpeg,image/png,image/webp';
   fileInput.className = 'visually-hidden';
 
-  append(root, title, thumbWrap, hint, formats, fileInput);
+  const removeBtn = el('button', 'dropzone__remove');
+  removeBtn.type = 'button';
+  removeBtn.textContent = '×';
+
+  append(root, title, thumbWrap, hint, formats, fileInput, removeBtn);
 
   let hasImage = false;
   let guiding = false;
+  let hintKey: MessageKey | null = null;
 
   const refreshText = (): void => {
     title.textContent = t(TITLE_KEY[role]);
-    hint.textContent = guiding ? t(GUIDE_KEY[role]) : hasImage ? t('dropReplaceHint') : t('dropHint');
+    hint.textContent = guiding
+      ? t(GUIDE_KEY[role])
+      : hasImage
+        ? t('dropReplaceHint')
+        : hintKey != null
+          ? t(hintKey)
+          : t('dropHint');
     formats.textContent = hasImage ? '' : t('dropFormats');
     root.setAttribute('aria-label', t(TITLE_KEY[role]));
+    removeBtn.setAttribute('aria-label', t('removeImageAria'));
   };
 
   const pick = (): void => fileInput.click();
@@ -72,6 +90,20 @@ export function createDropzone(
       e.preventDefault();
       pick();
     }
+  });
+
+  // 削除ボタン。root がファイル選択トリガー（role=button）を兼ねるため、
+  // click/pointerdown/keydown いずれもここで止めてファイル選択ダイアログへ
+  // 波及させない。
+  removeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onRemove?.();
+  });
+  removeBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+  });
+  removeBtn.addEventListener('keydown', (e) => {
+    e.stopPropagation();
   });
 
   fileInput.addEventListener('change', () => {
@@ -123,6 +155,10 @@ export function createDropzone(
     setGuiding(nextGuiding): void {
       guiding = nextGuiding;
       root.classList.toggle('is-guiding', guiding);
+      refreshText();
+    },
+    setHint(key): void {
+      hintKey = key;
       refreshText();
     },
   };
