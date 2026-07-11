@@ -5,6 +5,8 @@
  * ピクセルデータはすべてリニア RGB を前提とする（sRGB→リニア変換は呼び出し側＝Worker の責務）。
  */
 
+import type { CurveEdits } from './curve.ts';
+
 /** 3 要素ベクトル（長さ 3）。 */
 export type Vec3 = number[];
 
@@ -86,6 +88,12 @@ export interface GenerateLutOptions {
   sample: SampleOptions;
   /** マハラノビス減衰の開始距離 d0（既定 3.0）。 */
   d0?: number;
+  /**
+   * ユーザーによるカーブ編集の残差（R/G/B ＋ マスター）。パイプライン最終・クランプ直前に
+   * 加算する（§5.7）。未指定または空（`isEmptyEdits` が true）なら残差コードパスを一切通らず
+   * 完全に無効化され、既存ゴールデンとビット一致する。
+   */
+  curves?: CurveEdits;
 }
 
 /** `generateLut` の出力。 */
@@ -96,4 +104,21 @@ export interface GenerateLutResult {
   size: number;
   /** フォールバック（平均シフト or ランク落ち）が発生したか。UI 警告用。 */
   fallback: boolean;
+  /**
+   * 実効（記述的）カーブ F。残差適用前の base 格子から回帰した E[out|in]（§5.7）。
+   * `[R|G|B|M]` の4ブロック連結・各ブロック長 `CURVE_BINS`（計 4×CURVE_BINS）。
+   * カーブ編集には依存しない（フィードバックループ防止）。
+   */
+  effectiveCurves: Float32Array;
+  /**
+   * Source のガンマ空間ヒストグラム。`[R|G|B|Y']` の4ブロック連結・各ブロック長 `HIST_BINS`
+   * （計 4×HIST_BINS）・各ブロック最大値正規化。カーブ編集には依存しない。
+   */
+  histSource: Float32Array;
+  /**
+   * 結果（最終 LUT 通過後）のガンマ空間ヒストグラム。`[R|G|B|Y']` の4ブロック連結・
+   * 各ブロック長 `HIST_BINS`（計 4×HIST_BINS）・各ブロック最大値正規化。
+   * 残差適用済み LUT から集計するためカーブ編集にライブ追従する。
+   */
+  histResult: Float32Array;
 }

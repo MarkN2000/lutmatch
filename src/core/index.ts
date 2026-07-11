@@ -53,3 +53,19 @@ export {
   TEMPTINT_SCALE,
 } from './lut.ts';
 export { serializeCube, sanitizeTitle, DEFAULT_TITLE } from './cube.ts';
+export {
+  MAX_CONTROL_POINTS,
+  CURVE_MIN_X_GAP,
+  evalResidual,
+  sampleResidualToGrid,
+  isEmptyEdits,
+} from './curve.ts';
+export type { ControlPoint, CurveEdits } from './curve.ts';
+export {
+  CURVE_BINS,
+  HIST_BINS,
+  gammaLuma,
+  computeEffectiveCurves,
+  computeHistogram,
+  computeResultHistogram,
+} from './analysis.ts';

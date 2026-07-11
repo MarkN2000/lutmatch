@@ -1,17 +1,26 @@
 /**
  * LUT 化と後段処理（§5.5）、および全体オーケストレーション `generateLut`。
  *
- * 処理順序（§5.5）：
+ * 処理順序（§5.5 / §5.7）：
  *   1. N³ 格子点に f を適用
  *   2. 外挿域のマハラノビス減衰（格子点をリニア化し Source リニア統計で測定）
  *   3. 3D ガウシアン平滑化（スムージング連動）
  *   4. Identity ミックス（強度・自動マッチのみ）
  *   5. 手動調整（露出 → 色温度/ティント → コントラスト → 彩度）
- *   6. 0–1 クランプ（最終のみ）
+ *   ── [base 格子を保存：残差前・クランプ前の double 値。実効カーブ F 計算用] ──
+ *   6. 残差カーブ加算（R/G/B は格子入力座標、マスターはガンマ空間 luma で評価し全チャンネルへ同量）
+ *   7. 0–1 クランプ（最終のみ）
+ * ループ後：実効カーブ F（base から）・Source/結果ヒストグラムを計算して結果に含める。
  *
  * LUT データは長さ N³×3、**R が最速で回る**（index = (r + g·N + b·N²)·3）、値はガンマ RGB。
  */
 
+import {
+  computeEffectiveCurves,
+  computeHistogram,
+  computeResultHistogram,
+  gammaLuma,
+} from './analysis.ts';
 import {
   labToLinearRgb,
   linearRgbToLab,
@@ -19,6 +28,7 @@ import {
   rec709Luminance,
   srgbToLinear,
 } from './colorspace.ts';
+import { isEmptyEdits, sampleResidualToGrid } from './curve.ts';
 import { mahalanobisSq } from './linalg.ts';
 import { buildMatchTransform } from './pipeline.ts';
 import { extractValidSamples } from './stats.ts';
@@ -39,6 +49,24 @@ export const MAHALANOBIS_D1 = 6.0;
 export const SMOOTH_SIGMA_MAX = 0.05;
 /** 色温度／ティントの Lab オフセット係数（param/100 × これ）。 */
 export const TEMPTINT_SCALE = 30;
+
+/**
+ * マスター残差の高解像度 1D テーブル分解能。
+ * マスターはガンマ空間 luma（格子軸に沿わない連続値）を入力軸にとるため、格子点ごとに
+ * `evalResidual` を呼ぶ代わりに接線計算 1 回のテーブル（`sampleResidualToGrid`）を作り
+ * 線形補間で引く。curve.ts に評価器を足さずに済み（変更面が小さい・DRY）、1024 点あれば
+ * LUT の N（最大 65）より遥かに密なので補間誤差は無視できる。
+ */
+const MASTER_RESIDUAL_TABLE_N = 1024;
+
+/** 1D 残差テーブル（x∈[0,1] を等間隔サンプル）を x で線形補間して引く。 */
+function sampleTable(table: Float32Array, x: number): number {
+  const last = table.length - 1;
+  const fx = (x < 0 ? 0 : x > 1 ? 1 : x) * last;
+  const i0 = Math.floor(fx);
+  const i1 = i0 < last ? i0 + 1 : last;
+  return table[i0] + (table[i1] - table[i0]) * (fx - i0);
+}
 
 // ---- 格子インデックス ----
 
@@ -322,9 +350,27 @@ export function generateLut(
   // 3：平滑化。
   smoothGrid(auto, n, options.smoothing);
 
-  // 4〜6：Identity ミックス（自動のみ）→ 手動調整 → クランプ。
+  // 残差カーブの準備（非空時のみ・§5.7）。空/未指定なら加算コードを一切通さず、
+  // 既存の最終ループと完全に同一のコードパスになる（＝ゴールデンとビット一致）。
+  const hasCurves = !isEmptyEdits(options.curves);
+  let dR: Float32Array | null = null;
+  let dG: Float32Array | null = null;
+  let dB: Float32Array | null = null;
+  let masterTable: Float32Array | null = null;
+  if (hasCurves && options.curves) {
+    // R/G/B は入力軸（格子軸）に沿うので N 点テーブルで厳密（格子点 ir → dR[ir]）。
+    dR = sampleResidualToGrid(options.curves.r, n);
+    dG = sampleResidualToGrid(options.curves.g, n);
+    dB = sampleResidualToGrid(options.curves.b, n);
+    // マスターは luma 軸なので高解像度テーブル＋線形補間で引く（上記コメント参照）。
+    masterTable = sampleResidualToGrid(options.curves.master, MASTER_RESIDUAL_TABLE_N);
+  }
+
+  // 4〜7：Identity ミックス（自動のみ）→ 手動調整 →[base 保存]→ 残差加算 → クランプ。
+  // base は残差前・クランプ前の double 値。実効カーブ F をここから計算する（残差非依存）。
   const strength = options.strength / 100;
   const lut = new Float32Array(n * n * n * 3);
+  const base = new Float64Array(n * n * n * 3);
   const rgb: Vec3 = [0, 0, 0];
   for (let ib = 0; ib < n; ib++) {
     const gb = ib * inv;
@@ -339,6 +385,22 @@ export function generateLut(
         rgb[2] = gb + (auto[di + 2] - gb) * strength;
         // 手動調整（フル効果）。
         applyManual(rgb, options.manual);
+        // base 保存（残差前・クランプ前）。別配列への書き込みのみで lut 計算は不変。
+        base[di] = rgb[0];
+        base[di + 1] = rgb[1];
+        base[di + 2] = rgb[2];
+        // 残差カーブ加算（非空時のみ・double のまま加算）。
+        if (hasCurves) {
+          // R/G/B：格子入力座標ごとの残差。
+          rgb[0] += dR![ir];
+          rgb[1] += dG![ig];
+          rgb[2] += dB![ib];
+          // マスター：格子点入力のガンマ空間 luma で評価し、全チャンネルへ同量加算（色相不変）。
+          const rm = sampleTable(masterTable!, gammaLuma(gr, gg, gb));
+          rgb[0] += rm;
+          rgb[1] += rm;
+          rgb[2] += rm;
+        }
         // 最終クランプ。
         lut[di] = rgb[0] < 0 ? 0 : rgb[0] > 1 ? 1 : rgb[0];
         lut[di + 1] = rgb[1] < 0 ? 0 : rgb[1] > 1 ? 1 : rgb[1];
@@ -347,5 +409,18 @@ export function generateLut(
     }
   }
 
-  return { lut, size: n, fallback: match.fallback };
+  // ループ後：実効カーブ F（base＝残差前から算出＝カーブ編集に非依存）と
+  // Source/結果ヒストグラムを計算。srcSamples が空でも analysis 側は安全（F=x・ヒスト全0）。
+  const effectiveCurves = computeEffectiveCurves(base, n, srcSamples);
+  const histSource = computeHistogram(srcSamples);
+  const histResult = computeResultHistogram(lut, n, srcSamples);
+
+  return {
+    lut,
+    size: n,
+    fallback: match.fallback,
+    effectiveCurves,
+    histSource,
+    histResult,
+  };
 }

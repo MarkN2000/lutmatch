@@ -13,6 +13,8 @@ import {
   smoothGrid,
   trilinearSample,
 } from '../src/core/lut.ts';
+import { CURVE_BINS, HIST_BINS } from '../src/core/analysis.ts';
+import type { CurveEdits } from '../src/core/curve.ts';
 import { buildMatchTransform } from '../src/core/pipeline.ts';
 import { computeColorStats, extractValidSamples, regularizedCovInv } from '../src/core/stats.ts';
 import { NEUTRAL_ADJUSTMENTS } from '../src/core/types.ts';
@@ -427,5 +429,111 @@ describe('平滑化（§5.5）', () => {
       maxDiff = Math.max(maxDiff, Math.abs(smoothed[i] - uniform[i]));
     }
     expect(maxDiff).toBeLessThan(1e-6);
+  });
+});
+
+describe('残差カーブ統合（§5.7）', () => {
+  const src = makeLinearRgba(4096, 811);
+  const ref = makeLinearRgba(4096, 812);
+
+  /** 空カーブ（全チャンネル点なし）。isEmptyEdits が true になる。 */
+  const emptyEdits: CurveEdits = { master: [], r: [], g: [], b: [] };
+
+  function gridValue(lut: Float32Array, n: number, ir: number, ig: number, ib: number): Vec3 {
+    const idx = (ir + ig * n + ib * n * n) * 3;
+    return [lut[idx], lut[idx + 1], lut[idx + 2]];
+  }
+
+  it('残差 no-op：curves 未指定と空 CurveEdits の LUT がビット一致', () => {
+    const opts = baseOptions({ mode: 'C', size: 17 });
+    const a = generateLut(src, ref, 4, { ...opts, curves: undefined });
+    const b = generateLut(src, ref, 4, { ...opts, curves: emptyEdits });
+    expect(a.lut).toEqual(b.lut); // Float32Array 全要素一致。
+  });
+
+  it('ループ防止：curves を変えても effectiveCurves は不変（F は base=残差前から算出）', () => {
+    const opts = baseOptions({ mode: 'C', size: 17 });
+    const none = generateLut(src, ref, 4, { ...opts, curves: undefined });
+    const edited = generateLut(src, ref, 4, {
+      ...opts,
+      curves: { master: [], r: [{ x: 0, dy: -0.2 }, { x: 1, dy: 0.3 }], g: [], b: [] },
+    });
+    expect(edited.effectiveCurves).toEqual(none.effectiveCurves);
+  });
+
+  it('マスター適用：全域 +0.1 で中間調グレーの全チャンネルが curves なし比 +0.1', () => {
+    // strength:0・neutral manual なら base は Identity 格子（グレー点で確実に非クランプ域）。
+    const opts = baseOptions({ mode: 'C', size: 17, strength: 0, smoothing: 0 });
+    const none = generateLut(src, ref, 4, opts);
+    const master = generateLut(src, ref, 4, {
+      ...opts,
+      curves: { master: [{ x: 0, dy: 0.1 }, { x: 1, dy: 0.1 }], r: [], g: [], b: [] },
+    });
+    const mid = 8; // 8/16 = 0.5 グレー。
+    const base = gridValue(none.lut, 17, mid, mid, mid);
+    const out = gridValue(master.lut, 17, mid, mid, mid);
+    for (let c = 0; c < 3; c++) expect(out[c] - base[c]).toBeCloseTo(0.1, 4);
+  });
+
+  it('R 残差の分離：r のみ編集で G/B 出力が不変', () => {
+    const opts = baseOptions({ mode: 'C', size: 17 });
+    const none = generateLut(src, ref, 4, opts);
+    const edited = generateLut(src, ref, 4, {
+      ...opts,
+      curves: { master: [], r: [{ x: 0, dy: 0.05 }, { x: 1, dy: 0.15 }], g: [], b: [] },
+    });
+    const n = 17;
+    let rChanged = false;
+    for (let i = 0; i < none.lut.length; i += 3) {
+      // G/B は同一計算列なのでビット一致。
+      expect(edited.lut[i + 1]).toBe(none.lut[i + 1]);
+      expect(edited.lut[i + 2]).toBe(none.lut[i + 2]);
+      if (edited.lut[i] !== none.lut[i]) rChanged = true;
+    }
+    expect(rChanged).toBe(true);
+    expect(n).toBe(17);
+  });
+
+  it('マスターの中立性：有彩色格子点でも3チャンネルへ同量加算（差分が一致）', () => {
+    // strength:0 で base=Identity。内部の有彩点（各チャンネル非クランプ）で検証。
+    const opts = baseOptions({ mode: 'C', size: 17, strength: 0, smoothing: 0 });
+    const none = generateLut(src, ref, 4, opts);
+    const master = generateLut(src, ref, 4, {
+      ...opts,
+      curves: { master: [{ x: 0, dy: 0.05 }, { x: 1, dy: 0.15 }], r: [], g: [], b: [] },
+    });
+    const [ir, ig, ib] = [10, 6, 3]; // 有彩色（R≠G≠B）かつ非クランプ域。
+    const base = gridValue(none.lut, 17, ir, ig, ib);
+    const out = gridValue(master.lut, 17, ir, ig, ib);
+    const dr = out[0] - base[0];
+    const dg = out[1] - base[1];
+    const db = out[2] - base[2];
+    expect(dr).toBeGreaterThan(0);
+    expect(dg).toBeCloseTo(dr, 6);
+    expect(db).toBeCloseTo(dr, 6);
+  });
+
+  it('クランプ：白付近で残差 +0.2 でも出力は 1.0 を超えない', () => {
+    const opts = baseOptions({ mode: 'C', size: 17 });
+    const { lut } = generateLut(src, ref, 4, {
+      ...opts,
+      curves: { master: [{ x: 0, dy: 0.2 }, { x: 1, dy: 0.2 }], r: [], g: [], b: [] },
+    });
+    for (let i = 0; i < lut.length; i++) expect(lut[i]).toBeLessThanOrEqual(1);
+    // 白格子点（16,16,16）は残差 +0.2 でも 1.0 にクランプ。
+    const white = gridValue(lut, 17, 16, 16, 16);
+    for (let c = 0; c < 3; c++) expect(white[c]).toBe(1);
+  });
+
+  it('新フィールドが正しい長さで返る', () => {
+    const { effectiveCurves, histSource, histResult } = generateLut(
+      src,
+      ref,
+      4,
+      baseOptions({ mode: 'C', size: 17 }),
+    );
+    expect(effectiveCurves).toHaveLength(4 * CURVE_BINS);
+    expect(histSource).toHaveLength(4 * HIST_BINS);
+    expect(histResult).toHaveLength(4 * HIST_BINS);
   });
 });
