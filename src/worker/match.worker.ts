@@ -66,12 +66,17 @@ function handleGenerateLut(msg: GenerateLutRequestMessage): void {
     // 「呼び出し前後」より細かい進捗は出せない。フェーズは
     // decoding-source → decoding-reference → matching → finalizing の 4 段階で、
     // matching の 0.35 → finalizing の 0.95 の間が実際の重い計算区間。
+    // reference 省略時（恒等基底の手動 LUT 生成）は decoding-reference フェーズを送出せず、
+    // リニア化もスキップする（進捗が 0.05 → 0.35 に飛ぶが実害なし）。
     post(buildProgress('generate-lut', id, 'decoding-source', 0.05));
     const srcLinear = srgbRgbaToLinear(payload.source.buffer);
 
     if (isSuperseded(latestGenerateLutId, id)) return; // より新しい要求が来た → 破棄
-    post(buildProgress('generate-lut', id, 'decoding-reference', 0.2));
-    const refLinear = srgbRgbaToLinear(payload.reference.buffer);
+    let refLinear: Float32Array | null = null;
+    if (payload.reference) {
+      post(buildProgress('generate-lut', id, 'decoding-reference', 0.2));
+      refLinear = srgbRgbaToLinear(payload.reference.buffer);
+    }
 
     if (isSuperseded(latestGenerateLutId, id)) return;
     post(buildProgress('generate-lut', id, 'matching', 0.35));

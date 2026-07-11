@@ -71,6 +71,16 @@ describe('リクエストビルダー', () => {
     expect(msg.payload).toBe(payload); // 参照そのまま
   });
 
+  it('buildGenerateLutRequest：reference 省略のペイロードも許容する（恒等基底モード）', () => {
+    const payload: GenerateLutRequestPayload = {
+      source: pixelPayload(16),
+      options: OPTIONS,
+    };
+    const msg = buildGenerateLutRequest(43, payload);
+    expect(msg.kind).toBe('generate-lut');
+    expect(msg.payload.reference).toBeUndefined();
+  });
+
   it('buildSerializeCubeRequest：kind/id/payload が正しい', () => {
     const payload: SerializeCubeRequestPayload = {
       lut: new ArrayBuffer(8),
@@ -137,6 +147,14 @@ describe('転送リスト（Transferable）ヘルパー', () => {
     expect(list).toHaveLength(2);
     expect(list[0]).toBe(source.buffer); // 参照等価（コピーしていない）
     expect(list[1]).toBe(reference.buffer);
+  });
+
+  it('generateLutRequestTransferables：reference 省略時は source のみ返す（恒等基底モード）', () => {
+    const source = pixelPayload(16);
+    const payload: GenerateLutRequestPayload = { source, options: OPTIONS };
+    const list = generateLutRequestTransferables(payload);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toBe(source.buffer);
   });
 
   it('generateLutResultTransferables：lut/effectiveCurves/histSource/histResult の4バッファを順序通り返す', () => {

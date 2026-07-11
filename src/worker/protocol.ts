@@ -38,7 +38,8 @@ export interface PixelBufferPayload {
 /** LUT 生成リクエストのペイロード。 */
 export interface GenerateLutRequestPayload {
   source: PixelBufferPayload;
-  reference: PixelBufferPayload;
+  /** 省略時は恒等基底の手動 LUT 生成（自動マッチを行わない）。 */
+  reference?: PixelBufferPayload;
   options: GenerateLutOptions;
 }
 
@@ -205,12 +206,13 @@ export function buildErrorMessage(
 
 /**
  * LUT 生成リクエストで転送すべき ArrayBuffer 列（source → reference の順）。
+ * `reference`省略時（恒等基底の手動 LUT 生成）は source のみを返す。
  * 参照をそのまま返す（コピー・ラップしない）。
  */
 export function generateLutRequestTransferables(
   payload: GenerateLutRequestPayload,
 ): ArrayBuffer[] {
-  return [payload.source.buffer, payload.reference.buffer];
+  return payload.reference ? [payload.source.buffer, payload.reference.buffer] : [payload.source.buffer];
 }
 
 /**
