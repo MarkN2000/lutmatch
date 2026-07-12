@@ -85,6 +85,7 @@ export const en: Record<MessageKey, string> = {
   fileNameLabel: 'File name',
   downloadButton: 'Download LUT',
   savePngButton: 'Save result PNG',
+  saveResoniteButton: 'Save for Resonite',
   exportDetailsAria: 'File name and size options',
 
   // ---- Toasts / errors ----
@@ -92,6 +93,7 @@ export const en: Record<MessageKey, string> = {
   errDecode: 'Failed to load the image. Please try a different file.',
   errSample: 'Failed to load the sample images.',
   errGenerate: 'Computation failed. Please try again.',
+  errResoniteExport: 'Failed to export the Resonite package.',
   warnFallback: 'Statistics were unstable, so a simplified (mean-shift) match was used.',
   warnCanvas2d: 'WebGL is unavailable, so Canvas 2D rendering is used.',
   toastClose: 'Close',

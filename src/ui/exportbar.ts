@@ -18,14 +18,18 @@ export interface ExportBarConfig {
   onSizeChange: (size: number) => void;
   onDownload: () => void;
   onSavePng: () => void;
+  onSaveResonite: () => void;
 }
+
+/** setBusy の対象ボタン（既定は DL）。 */
+export type ExportBusyTarget = 'download' | 'resonite';
 
 export interface ExportBarHandle {
   element: HTMLElement;
   getSize(): number;
   getFileName(): string;
   setDisabled(disabled: boolean): void;
-  setBusy(busy: boolean): void;
+  setBusy(busy: boolean, target?: ExportBusyTarget): void;
 }
 
 /** 既定ファイル名 `lutmatch_YYYYMMDD_HHmm.cube` を現在時刻から作る。 */
@@ -101,10 +105,14 @@ export function createExportBar(config: ExportBarConfig): ExportBarHandle {
   pngBtn.type = 'button';
   pngBtn.addEventListener('click', () => config.onSavePng());
 
+  const resoniteBtn = el('button', 'btn btn--ghost exportbar__resonite');
+  resoniteBtn.type = 'button';
+  resoniteBtn.addEventListener('click', () => config.onSaveResonite());
+
   const dlBtn = el('button', 'btn btn--primary exportbar__dl');
   dlBtn.type = 'button';
   dlBtn.addEventListener('click', () => config.onDownload());
-  append(actions, pngBtn, dlBtn);
+  append(actions, pngBtn, resoniteBtn, dlBtn);
 
   optToggle.addEventListener('click', () => {
     const open = optToggle.getAttribute('aria-expanded') !== 'true';
@@ -119,6 +127,7 @@ export function createExportBar(config: ExportBarConfig): ExportBarHandle {
     nameLabel.textContent = t('fileNameLabel');
     dlBtn.textContent = t('downloadButton');
     pngBtn.textContent = t('savePngButton');
+    resoniteBtn.textContent = t('saveResoniteButton');
     optToggle.setAttribute('aria-label', t('exportDetailsAria'));
     nameInput.setAttribute('aria-label', t('fileNameLabel'));
   };
@@ -134,12 +143,14 @@ export function createExportBar(config: ExportBarConfig): ExportBarHandle {
       root.classList.toggle('is-disabled', disabled);
       dlBtn.disabled = disabled;
       pngBtn.disabled = disabled;
+      resoniteBtn.disabled = disabled;
       nameInput.disabled = disabled;
       for (const btn of sizeButtons.values()) btn.disabled = disabled;
     },
-    setBusy: (busy) => {
-      dlBtn.classList.toggle('is-busy', busy);
-      dlBtn.disabled = busy;
+    setBusy: (busy, target = 'download') => {
+      const btn = target === 'resonite' ? resoniteBtn : dlBtn;
+      btn.classList.toggle('is-busy', busy);
+      btn.disabled = busy;
     },
   };
 }

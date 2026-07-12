@@ -30,6 +30,7 @@ import { loadImage, ImageLoadError, type LoadedImage } from './io/image.ts';
 import { MatchWorkerClient, SupersededError } from './worker/client.ts';
 import type { GenerateLutRequestPayload } from './worker/protocol.ts';
 import { CURVE_BINS, HIST_BINS, NEUTRAL_ADJUSTMENTS, srgbToLinear, type GenerateLutOptions, type MatchMode } from './core/index.ts';
+import { buildResonitePackage, OLD_LUT_HASH } from './core/resonite/package.ts';
 
 // ============================================================
 // 定数・既定値（§4.4）
@@ -231,6 +232,7 @@ const exportBar = createExportBar({
   onSizeChange: () => scheduleRecompute(),
   onDownload: () => void downloadCube(),
   onSavePng: () => void savePng(),
+  onSaveResonite: () => void saveResonite(),
 });
 exportBar.element.classList.add('block-exportbar');
 
@@ -566,6 +568,89 @@ async function savePng(): Promise<void> {
   } finally {
     savingPng = false;
     exportBar.setBusy(false);
+  }
+}
+
+// ---- Resonite パッケージ書き出し（§4.6・§13） ----
+
+/** メタデータ（サムネイル .bitmap）のファイル名（テンプレート固定）。 */
+const RESONITE_METADATA_NAME =
+  'a36499239050e1cf138b00b1fac4ef15b1b567d43e01e0c8cf4dcfbce22681f7.bitmap';
+
+interface ResoniteTemplate {
+  recordJson: string;
+  frdtDecoded: Uint8Array;
+  assets: Array<{ hash: string; data: Uint8Array }>;
+  metadataName: string;
+  metadataData: Uint8Array;
+}
+
+/** 一度フェッチしたテンプレート資材のメモリキャッシュ（2 回目以降は再利用）。 */
+let resoniteTemplateCache: ResoniteTemplate | null = null;
+let savingResonite = false;
+
+/** URL からバイト列を取得する（非 2xx は例外）。 */
+async function fetchBytes(url: string): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch failed: ${url} (${res.status})`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/** public/resonite-template/ からテンプレート資材一式を読み込む（キャッシュ付き）。 */
+async function loadResoniteTemplate(): Promise<ResoniteTemplate> {
+  if (resoniteTemplateCache) return resoniteTemplateCache;
+  const dir = `${import.meta.env.BASE_URL}resonite-template/`;
+  const recordRes = await fetch(`${dir}template.record`);
+  if (!recordRes.ok) throw new Error(`fetch failed: template.record (${recordRes.status})`);
+  const recordJson = await recordRes.text();
+  // 8 テンプレアセットのハッシュ名は manifest（9 件）から旧 LUT ハッシュを除いて導出する。
+  const manifest = (JSON.parse(recordJson) as { assetManifest: Array<{ hash: string }> })
+    .assetManifest;
+  const assetHashes = manifest.map((e) => e.hash).filter((h) => h !== OLD_LUT_HASH);
+  const [frdtDecoded, metadataData, ...assetDatas] = await Promise.all([
+    fetchBytes(`${dir}frdt-decoded.bin`),
+    fetchBytes(`${dir}metadata/${RESONITE_METADATA_NAME}`),
+    ...assetHashes.map((h) => fetchBytes(`${dir}assets/${h}`)),
+  ]);
+  const assets = assetHashes.map((hash, i) => ({ hash, data: assetDatas[i] }));
+  resoniteTemplateCache = {
+    recordJson,
+    frdtDecoded,
+    assets,
+    metadataName: RESONITE_METADATA_NAME,
+    metadataData,
+  };
+  return resoniteTemplateCache;
+}
+
+async function saveResonite(): Promise<void> {
+  const lut = state.currentLut;
+  if (!lut) return;
+  if (savingResonite) return; // 連打・多重フェッチ防止。
+  savingResonite = true;
+  exportBar.setBusy(true, 'resonite');
+  const base = exportBar.getFileName().replace(/\.cube$/i, '');
+  const filename = `${base}.resonitepackage`;
+  try {
+    const template = await loadResoniteTemplate();
+    // lut.slice() で複製を渡す（現在の LUT はプレビュー等が参照中のため）。
+    const pkg = await buildResonitePackage({
+      lut: lut.slice(),
+      size: state.currentLutSize,
+      name: base,
+      templateRecordJson: template.recordJson,
+      frdtDecoded: template.frdtDecoded,
+      assets: template.assets,
+      metadataName: template.metadataName,
+      metadataData: template.metadataData,
+    });
+    // SharedArrayBuffer は不使用（§3）のため BlobPart へ narrow。
+    triggerDownload(new Blob([pkg as Uint8Array<ArrayBuffer>], { type: 'application/octet-stream' }), filename);
+  } catch {
+    toast.show(t('errResoniteExport'), 'error');
+  } finally {
+    savingResonite = false;
+    exportBar.setBusy(false, 'resonite');
   }
 }
 

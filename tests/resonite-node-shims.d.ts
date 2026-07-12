@@ -12,4 +12,9 @@ declare module 'node:module' {
 
 declare module 'node:zlib' {
   export function brotliDecompressSync(buf: Uint8Array): Uint8Array;
+  export function inflateRawSync(buf: Uint8Array): Uint8Array;
+}
+
+declare module 'node:fs' {
+  export function readFileSync(path: string | URL): Uint8Array;
 }

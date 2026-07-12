@@ -717,10 +717,12 @@ body {
     flex: 1;
     justify-content: flex-end;
   }
-  .exportbar__png {
+  .exportbar__png,
+  .exportbar__resonite {
     display: none;
   }
-  .exportbar.is-options-open .exportbar__png {
+  .exportbar.is-options-open .exportbar__png,
+  .exportbar.is-options-open .exportbar__resonite {
     display: inline-flex;
   }
 }

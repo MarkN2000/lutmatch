@@ -29,12 +29,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 型チェック: `tsc --noEmit`（CI でも実行）
 - テスト: `npx vitest run`／単一ファイル: `npx vitest run tests/<file>.test.ts`
 
-外部ランタイム依存（CDN含む）はゼロを維持する。依存は devDependencies（vite / typescript / vitest）のみ。
+外部ランタイム依存（CDN含む）はゼロを維持する。依存は原則 devDependencies（vite / typescript / vitest）のみ。ただしテスト専用の dev 依存（現在 `lzma`。Resonite Bmp3D の LZMA 往復検証に使用）は許可する（ランタイム＝`src/` へは持ち込まない）。
 
 ## アーキテクチャ（spec.md §8 のディレクトリ案）
 
 - `src/core/` — 純粋なアルゴリズム層（UI非依存、テスト対象）
   - `colorspace.ts`（sRGB↔リニア、Lab）→ `mkl.ts`（線形マッチ）／`histmatch.ts`（ヒストグラムマッチ）→ `pipeline.ts`（モード合成・後段処理）→ `lut.ts`（格子生成・平滑化）→ `cube.ts`（シリアライズ）
+  - `src/core/resonite/` — Resonite `.resonitepackage` 書き出し（`lzma.ts`＝Bmp3D 用 LZMA／`brotliStore.ts`＝FrDT 用 store-only Brotli／`bmp3d.ts`＝3D LUT アセット／`zip.ts`＝最小 ZIP／`package.ts`＝テンプレート差し替え組み立て。すべて純粋・fetch/DOM 非依存）
 - `src/worker/match.worker.ts` — 重い計算は Web Worker で実行（メインスレッドをブロックしない）
 - `src/gl/preview.ts` — WebGL プレビュー＋Canvas 2D フォールバック（Safari 対策で必須維持）
 - `src/ui/`, `src/main.ts` — 素の DOM + CSS、`src/i18n/{ja,en}.ts` — 文言辞書

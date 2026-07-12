@@ -84,6 +84,7 @@ export const ja = {
   fileNameLabel: 'ファイル名',
   downloadButton: 'LUT をダウンロード',
   savePngButton: '適用後を PNG 保存',
+  saveResoniteButton: 'Resonite 用に保存',
   exportDetailsAria: 'ファイル名・サイズの詳細',
 
   // ---- トースト・エラー（§6.2）----
@@ -91,6 +92,7 @@ export const ja = {
   errDecode: '画像の読み込みに失敗しました。別の画像でお試しください。',
   errSample: 'サンプル画像の読み込みに失敗しました。',
   errGenerate: '計算に失敗しました。もう一度お試しください。',
+  errResoniteExport: 'Resonite パッケージの書き出しに失敗しました。',
   warnFallback: '統計が不安定なため簡易マッチ（平均シフト）に切り替えました。',
   warnCanvas2d: 'WebGL が使えないため Canvas 2D 描画に切り替えました。',
   toastClose: '閉じる',
