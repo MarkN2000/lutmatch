@@ -7,10 +7,17 @@
  *   3. 3D ガウシアン平滑化（スムージング連動）
  *   4. Identity ミックス（強度・自動マッチのみ）
  *   5. 手動調整（露出 → 色温度/ティント → コントラスト → 彩度）
- *   ── [base 格子を保存：残差前・クランプ前の double 値。実効カーブ F 計算用] ──
+ *   ── [baseHue 格子を保存：色相カーブ適用前の double 値。Source 色相ヒストグラム用] ──
+ *   5.5. 色相カーブ（Hue vs Hue / Hue vs Sat・Lab LCh 上で L* 不変・低彩度減衰）
+ *   ── [base 格子を保存：色相カーブ適用後・残差前・クランプ前の double 値。実効カーブ F 計算用] ──
  *   6. 残差カーブ加算（R/G/B は格子入力座標、マスターはガンマ空間 luma で評価し全チャンネルへ同量）
  *   7. 0–1 クランプ（最終のみ）
  * ループ後：実効カーブ F（base から）・Source/結果ヒストグラムを計算して結果に含める。
+ *
+ * base（実効カーブ用）は手順5.5 適用**後**にすることで R/G/B タブの「表示＝実効果」を保つ。
+ * 一方、色相ヒストグラムの Source 側は手順5.5 適用**前**（baseHue）から測り、色相カーブ編集で
+ * 分布が動かない（フィードバックループ防止）。色相カーブ未編集なら手順5.5 を丸ごとスキップし、
+ * baseHue は base と同一配列となって既存出力とビット一致する（ゴールデン不変）。
  *
  * Reference なし（`refPixels == null`）＝恒等基底の手動 LUT 作成モード：手順 1〜4 をすべて
  * スキップし、主ループの基底を格子座標そのもの（strength 非依存の厳密恒等）とする。これは
@@ -33,7 +40,13 @@ import {
   rec709Luminance,
   srgbToLinear,
 } from './colorspace.ts';
-import { isEmptyEdits, sampleResidualToGrid } from './curve.ts';
+import {
+  isHueCurvesEmpty,
+  isRgbCurvesEmpty,
+  sampleResidualToGrid,
+  sampleResidualToGridPeriodic,
+} from './curve.ts';
+import { applyHueCurveGamma, HUE_RESIDUAL_TABLE_N } from './huecurve.ts';
 import { mahalanobisSq } from './linalg.ts';
 import { buildMatchTransform } from './pipeline.ts';
 import { extractValidSamples } from './stats.ts';
@@ -374,14 +387,17 @@ export function generateLut(
     smoothGrid(auto, n, options.smoothing);
   }
 
-  // 残差カーブの準備（非空時のみ・§5.7）。空/未指定なら加算コードを一切通さず、
-  // 既存の最終ループと完全に同一のコードパスになる（＝ゴールデンとビット一致）。
-  const hasCurves = !isEmptyEdits(options.curves);
+  // RGB 残差カーブと色相カーブは独立に判定する（RGB だけ編集時に色相パスを通らない・逆も同様）。
+  // いずれも空/未指定なら対応コードを一切通さず、既存の最終ループと同一パスになる（ゴールデン不変）。
+  const hasRgbCurves = !isRgbCurvesEmpty(options.curves);
+  const hasHueCurves = !isHueCurvesEmpty(options.curves);
+
+  // 残差カーブの準備（RGB 非空時のみ・§5.7）。
   let dR: Float32Array | null = null;
   let dG: Float32Array | null = null;
   let dB: Float32Array | null = null;
   let masterTable: Float32Array | null = null;
-  if (hasCurves && options.curves) {
+  if (hasRgbCurves && options.curves) {
     // R/G/B は入力軸（格子軸）に沿うので N 点テーブルで厳密（格子点 ir → dR[ir]）。
     dR = sampleResidualToGrid(options.curves.r, n);
     dG = sampleResidualToGrid(options.curves.g, n);
@@ -390,11 +406,23 @@ export function generateLut(
     masterTable = sampleResidualToGrid(options.curves.master, MASTER_RESIDUAL_TABLE_N);
   }
 
+  // 色相カーブの準備（色相非空時のみ・§色相カーブ）。色相 h は格子軸に沿わない連続値なので、
+  // 周期高解像度テーブル＋周期線形補間で引く（マスターと同じ発想・huecurve.ts）。
+  let hueRotTable: Float32Array | null = null;
+  let hueGainTable: Float32Array | null = null;
+  if (hasHueCurves && options.curves) {
+    hueRotTable = sampleResidualToGridPeriodic(options.curves.hue ?? [], HUE_RESIDUAL_TABLE_N);
+    hueGainTable = sampleResidualToGridPeriodic(options.curves.hueSat ?? [], HUE_RESIDUAL_TABLE_N);
+  }
+
   // 4〜7：Identity ミックス（自動のみ）→ 手動調整 →[base 保存]→ 残差加算 → クランプ。
   // base は残差前・クランプ前の double 値。実効カーブ F をここから計算する（残差非依存）。
   const strength = options.strength / 100;
   const lut = new Float32Array(n * n * n * 3);
   const base = new Float64Array(n * n * n * 3);
+  // baseHue（色相カーブ適用前）：色相カーブ未編集なら base と同一配列を使い、余分な確保・
+  // 書き込みを避ける（＝ゴールデン不変）。編集時のみ別配列に手順5.5 前の値を残す。
+  const baseHue = hasHueCurves ? new Float64Array(n * n * n * 3) : base;
   const rgb: Vec3 = [0, 0, 0];
   for (let ib = 0; ib < n; ib++) {
     const gb = ib * inv;
@@ -416,12 +444,20 @@ export function generateLut(
         }
         // 手動調整（フル効果）。
         applyManual(rgb, options.manual);
-        // base 保存（残差前・クランプ前）。別配列への書き込みのみで lut 計算は不変。
+        // 手順5.5 色相カーブ：適用前の値を baseHue に残し（Source 色相ヒスト用）、色相回転・
+        // 彩度ゲインを適用する。未編集時は baseHue===base なのでこのブロックを通らない。
+        if (hasHueCurves) {
+          baseHue[di] = rgb[0];
+          baseHue[di + 1] = rgb[1];
+          baseHue[di + 2] = rgb[2];
+          applyHueCurveGamma(rgb, hueRotTable!, hueGainTable!);
+        }
+        // base 保存（色相カーブ適用後・残差前・クランプ前）。別配列への書き込みのみで lut 計算は不変。
         base[di] = rgb[0];
         base[di + 1] = rgb[1];
         base[di + 2] = rgb[2];
-        // 残差カーブ加算（非空時のみ・double のまま加算）。
-        if (hasCurves) {
+        // 残差カーブ加算（RGB 非空時のみ・double のまま加算）。
+        if (hasRgbCurves) {
           // R/G/B：格子入力座標ごとの残差。
           rgb[0] += dR![ir];
           rgb[1] += dG![ig];
@@ -443,7 +479,8 @@ export function generateLut(
   // ループ後：実効カーブ F（base＝残差前から算出＝カーブ編集に非依存）と
   // Source/結果ヒストグラムを計算。srcSamples が空でも analysis 側は安全（F=x・ヒスト全0）。
   const effectiveCurves = computeEffectiveCurves(base, n, srcSamples);
-  const histSource = computeHistogram(srcSamples);
+  // Source ヒストの H ブロックは baseHue（色相カーブ適用前）から測る（フィードバックループ防止）。
+  const histSource = computeHistogram(srcSamples, baseHue, n);
   const histResult = computeResultHistogram(lut, n, srcSamples);
 
   return {

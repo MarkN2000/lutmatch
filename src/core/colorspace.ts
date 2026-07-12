@@ -102,6 +102,35 @@ export function linearRgbToLab(r: number, g: number, b: number, out: Vec3): Vec3
   return out;
 }
 
+// ---- Lab ⇄ LCh（極座標・色相は turns [0,1) 正規化） ----
+
+/**
+ * Lab → LCh。`out` に [L, C, h] を書き込む。
+ * - C = √(a²+b²)（クロマ）
+ * - h = atan2(b, a)/2π を [0,1) に正規化した色相（turns）。グレー軸（a=b=0）は h=0。
+ * L* はそのまま透過する（色相カーブは L 不変・§色相）。
+ */
+export function labToLch(l: number, a: number, b: number, out: Vec3): Vec3 {
+  out[0] = l;
+  out[1] = Math.hypot(a, b);
+  let h = Math.atan2(b, a) / (2 * Math.PI); // (−0.5, 0.5]
+  if (h < 0) h += 1; // → [0,1)
+  out[2] = h;
+  return out;
+}
+
+/**
+ * LCh → Lab。`out` に [L, a, b] を書き込む（h は turns [0,1) 正規化・範囲外も周期で受容）。
+ * a = C·cos(2πh)、b = C·sin(2πh)。C<0 でも符号付きで連続に扱える。
+ */
+export function lchToLab(l: number, c: number, h: number, out: Vec3): Vec3 {
+  const ang = h * 2 * Math.PI;
+  out[0] = l;
+  out[1] = c * Math.cos(ang);
+  out[2] = c * Math.sin(ang);
+  return out;
+}
+
 /** Lab（D65）→ リニア RGB。`out` に [R, G, B] を書き込む。 */
 export function labToLinearRgb(l: number, a: number, bb: number, out: Vec3): Vec3 {
   const fy = (l + 16) / 116;

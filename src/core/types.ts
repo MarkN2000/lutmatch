@@ -111,14 +111,16 @@ export interface GenerateLutResult {
    */
   effectiveCurves: Float32Array;
   /**
-   * Source のガンマ空間ヒストグラム。`[R|G|B|Y']` の4ブロック連結・各ブロック長 `HIST_BINS`
-   * （計 4×HIST_BINS）・各ブロック最大値正規化。カーブ編集には依存しない。
+   * Source のガンマ空間ヒストグラム。`[R|G|B|Y'|H]` の5ブロック連結・各ブロック長 `HIST_BINS`
+   * （計 `HIST_BLOCKS`×HIST_BINS）・各ブロック最大値正規化。R/G/B/Y' は素の Source 分布で
+   * カーブ編集に依存しない。H（色相・彩度重み付き）は色相カーブ適用**前**の base から測るため
+   * 色相カーブ編集でも動かない（フィードバックループ防止）。
    */
   histSource: Float32Array;
   /**
-   * 結果（最終 LUT 通過後）のガンマ空間ヒストグラム。`[R|G|B|Y']` の4ブロック連結・
-   * 各ブロック長 `HIST_BINS`（計 4×HIST_BINS）・各ブロック最大値正規化。
-   * 残差適用済み LUT から集計するためカーブ編集にライブ追従する。
+   * 結果（最終 LUT 通過後）のガンマ空間ヒストグラム。`[R|G|B|Y'|H]` の5ブロック連結・
+   * 各ブロック長 `HIST_BINS`（計 `HIST_BLOCKS`×HIST_BINS）・各ブロック最大値正規化。
+   * 最終 LUT から集計するため RGB カーブ・色相カーブ双方にライブ追従する。
    */
   histResult: Float32Array;
 }

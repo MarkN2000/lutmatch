@@ -57,7 +57,8 @@ export interface GenerateLutRequestMessage {
  * ビン数（CURVE_BINS/HIST_BINS）はメッセージに含めない。呼び出し側は `core/index.ts` の
  * 共有定数 `CURVE_BINS`/`HIST_BINS` を import して使う（DRY・値の二重管理を避ける）。
  * - `effectiveCurves`：`[R|G|B|M]` の4ブロック連結・各ブロック長 `CURVE_BINS`
- * - `histSource`/`histResult`：`[R|G|B|Y']` の4ブロック連結・各ブロック長 `HIST_BINS`
+ * - `histSource`/`histResult`：`[R|G|B|Y'|H]` の5ブロック連結・各ブロック長 `HIST_BINS`
+ *   （ブロック数は `HIST_BLOCKS`＝5）
  */
 export interface GenerateLutResultMessage {
   kind: 'generate-lut-result';

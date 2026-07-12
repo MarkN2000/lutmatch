@@ -12,6 +12,8 @@ export {
   rec709Luminance,
   linearRgbToLab,
   labToLinearRgb,
+  labToLch,
+  lchToLab,
 } from './colorspace.ts';
 export {
   N_MIN_PIXELS,
@@ -58,12 +60,25 @@ export {
   CURVE_MIN_X_GAP,
   evalResidual,
   sampleResidualToGrid,
+  evalResidualPeriodic,
+  sampleResidualToGridPeriodic,
   isEmptyEdits,
+  isRgbCurvesEmpty,
+  isHueCurvesEmpty,
 } from './curve.ts';
 export type { ControlPoint, CurveEdits } from './curve.ts';
 export {
+  HUE_CURVE_MAX_ROTATION_DEG,
+  HUE_CURVE_MIN_CHROMA,
+  HUE_CURVE_CHROMA_EPS,
+  HUE_RESIDUAL_TABLE_N,
+  chromaWeight,
+  applyHueCurveGamma,
+} from './huecurve.ts';
+export {
   CURVE_BINS,
   HIST_BINS,
+  HIST_BLOCKS,
   gammaLuma,
   computeEffectiveCurves,
   computeHistogram,

@@ -9,11 +9,13 @@
  *   trilinear 適用し、ビンごとに E[out_c | in_c] を回帰する（記述的カーブ）。
  * - ヒストグラム：Source（リニア→ガンマ化）／結果（最終 LUT 通過後）の度数分布。
  *
- * チャンネル順は全関数で **[R | G | B | M] の4ブロック連結** に統一する
- * （M は実効カーブではマスター＝ガンマ空間 luma、ヒストグラムでは Y' 分布）。
+ * 実効カーブは **[R | G | B | M] の4ブロック連結**（M はマスター＝ガンマ空間 luma）。
+ * ヒストグラムは **[R | G | B | Y' | H] の5ブロック連結**（Y' はガンマ空間 luma 分布、
+ * H は色相 h∈[0,1) の彩度重み付き分布・`HIST_BLOCKS`＝5）。
  */
 
-import { linearToSrgb } from './colorspace.ts';
+import { labToLch, linearRgbToLab, linearToSrgb, srgbToLinear } from './colorspace.ts';
+import { chromaWeight } from './huecurve.ts';
 import { trilinearSample } from './lut.ts';
 import type { Vec3 } from './types.ts';
 
@@ -21,6 +23,9 @@ import type { Vec3 } from './types.ts';
 export const CURVE_BINS = 64;
 /** ヒストグラムの解像度（度数ビン数）。 */
 export const HIST_BINS = 256;
+
+/** ヒストグラムのブロック数（[R|G|B|Y'|H] の 5 ブロック連結）。 */
+export const HIST_BLOCKS = 5;
 
 /**
  * ガンマ空間 Rec.709 luma（Y' = 0.2126R' + 0.7152G' + 0.0722B'）。
@@ -151,8 +156,9 @@ export function computeEffectiveCurves(
 }
 
 /**
- * ガンマ座標三つ組をヒストグラム（R/G/B/Y' の4ブロック度数）へ積算する内部ヘルパ。
- * @param hist 度数バッファ（長さ 4×bins）
+ * ガンマ座標三つ組をヒストグラム（R/G/B/Y' の先頭4ブロック度数）へ積算する内部ヘルパ。
+ * H（第5）ブロックは色相・彩度重みが必要なため `accumHueBlock` が別途担う。
+ * @param hist 度数バッファ（長さ HIST_BLOCKS×bins）
  */
 function accumHist(hist: Float64Array, bins: number, r: number, g: number, b: number): void {
   hist[binOf(r, bins)]++;
@@ -161,10 +167,25 @@ function accumHist(hist: Float64Array, bins: number, r: number, g: number, b: nu
   hist[3 * bins + binOf(gammaLuma(r, g, b), bins)]++;
 }
 
+const hueLab: Vec3 = [0, 0, 0];
+const hueLch: Vec3 = [0, 0, 0];
+
+/**
+ * ガンマ RGB 三つ組を H（第5）ブロックへ積算する。色相 h（周期 [0,1)）を bin 化し、
+ * 低彩度減衰の重み w=chromaWeight(C) を度数として加える（グレー画素の無意味な色相を抑制）。
+ * @param hist 度数バッファ（長さ HIST_BLOCKS×bins）
+ */
+function accumHueBlock(hist: Float64Array, bins: number, r: number, g: number, b: number): void {
+  linearRgbToLab(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b), hueLab);
+  labToLch(hueLab[0], hueLab[1], hueLab[2], hueLch);
+  const w = chromaWeight(hueLch[1]);
+  if (w > 0) hist[4 * bins + binOf(hueLch[2], bins)] += w;
+}
+
 /** 各ブロックを自身の最大度数で [0,1] 正規化して Float32Array へ書き出す。全0はそのまま。 */
 function normalizeHist(hist: Float64Array, bins: number): Float32Array {
-  const out = new Float32Array(4 * bins);
-  for (let block = 0; block < 4; block++) {
+  const out = new Float32Array(HIST_BLOCKS * bins);
+  for (let block = 0; block < HIST_BLOCKS; block++) {
     const off = block * bins;
     let max = 0;
     for (let i = 0; i < bins; i++) if (hist[off + i] > max) max = hist[off + i];
@@ -176,24 +197,40 @@ function normalizeHist(hist: Float64Array, bins: number): Float32Array {
 }
 
 /**
- * リニア RGB サンプルのガンマ空間ヒストグラム（R/G/B/Y'）。
+ * リニア RGB サンプルのガンマ空間ヒストグラム（R/G/B/Y' ＋ H）。
+ *
+ * R/G/B/Y' の 4 ブロックは**素の Source サンプル**（リニア→ガンマ化）から集計する。
+ * H（第5）ブロックは意味が異なり、`hueGrid`（＝色相カーブ適用**前**の base 格子）を
+ * サンプルへ trilinear 適用した後の色相分布を集計する（色相カーブ編集で動かない＝
+ * フィードバックループ防止）。`hueGrid` 省略時は H ブロックを全 0 とする。
  *
  * @param linearSamples 有効画素のリニア RGB パック配列
+ * @param hueGrid H ブロック用のガンマ空間格子（省略可・長さ 3n³・R 最速）
+ * @param n hueGrid の格子解像度（hueGrid 指定時は必須）
  * @param bins ビン数（既定 HIST_BINS）
- * @returns Float32Array(4×bins)。[R|G|B|Y'] 連結・各ブロック最大値正規化
+ * @returns Float32Array(HIST_BLOCKS×bins)。[R|G|B|Y'|H] 連結・各ブロック最大値正規化
  */
 export function computeHistogram(
   linearSamples: Float32Array,
+  hueGrid?: Float32Array | Float64Array,
+  n?: number,
   bins: number = HIST_BINS,
 ): Float32Array {
-  const hist = new Float64Array(4 * bins);
+  const hist = new Float64Array(HIST_BLOCKS * bins);
   const count = Math.floor(linearSamples.length / 3);
+  const applyHue = hueGrid != null && n != null && n > 0;
+  const tri: Vec3 = [0, 0, 0];
   for (let i = 0; i < count; i++) {
     // リニア → ガンマ化してから集計。
     const r = linearToSrgb(linearSamples[i * 3]);
     const g = linearToSrgb(linearSamples[i * 3 + 1]);
     const b = linearToSrgb(linearSamples[i * 3 + 2]);
     accumHist(hist, bins, r, g, b);
+    // H ブロック：base 格子（色相カーブ適用前）をサンプルへ適用した色相。
+    if (applyHue) {
+      trilinearSample(hueGrid, n, r, g, b, tri);
+      accumHueBlock(hist, bins, tri[0], tri[1], tri[2]);
+    }
   }
   return normalizeHist(hist, bins);
 }
@@ -202,13 +239,14 @@ export function computeHistogram(
  * 結果ヒストグラム：最終 LUT（クランプ済み・ガンマ空間格子）にサンプルを通してから集計。
  *
  * 入力サンプルはリニア → ガンマ座標化 → trilinear 適用。出力はガンマ空間なので
- * そのままビニングする（R/G/B/Y'）。
+ * そのままビニングする（R/G/B/Y' ＋ H）。H ブロックは最終 LUT 適用後サンプルの色相
+ * （彩度重み付き）で、色相カーブ編集に**ライブ追従**する（Source 側 H とは非対称）。
  *
  * @param lut 最終 LUT（Float32Array・長さ 3n³・R 最速・ガンマ RGB）
  * @param n 格子解像度
  * @param linearSamples 有効画素のリニア RGB パック配列
  * @param bins ビン数（既定 HIST_BINS）
- * @returns Float32Array(4×bins)。[R|G|B|Y'] 連結・各ブロック最大値正規化
+ * @returns Float32Array(HIST_BLOCKS×bins)。[R|G|B|Y'|H] 連結・各ブロック最大値正規化
  */
 export function computeResultHistogram(
   lut: Float32Array,
@@ -216,7 +254,7 @@ export function computeResultHistogram(
   linearSamples: Float32Array,
   bins: number = HIST_BINS,
 ): Float32Array {
-  const hist = new Float64Array(4 * bins);
+  const hist = new Float64Array(HIST_BLOCKS * bins);
   const count = Math.floor(linearSamples.length / 3);
   const tri: Vec3 = [0, 0, 0];
   for (let i = 0; i < count; i++) {
@@ -225,6 +263,7 @@ export function computeResultHistogram(
     const xb = linearToSrgb(linearSamples[i * 3 + 2]);
     trilinearSample(lut, n, xr, xg, xb, tri);
     accumHist(hist, bins, tri[0], tri[1], tri[2]);
+    accumHueBlock(hist, bins, tri[0], tri[1], tri[2]);
   }
   return normalizeHist(hist, bins);
 }

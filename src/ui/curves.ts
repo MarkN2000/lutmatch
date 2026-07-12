@@ -51,9 +51,12 @@ export interface CurvesHandle {
   setDisabled(disabled: boolean): void;
 }
 
+/** RGB カーブエディタのチャンネルキー（master/r/g/b。周期軸の hue/hueSat は別エディタ）。 */
+type RgbCurveKey = 'master' | 'r' | 'g' | 'b';
+
 /** 4 チャンネルの定義（タブ表示順）。block は [R|G|B|M]／[R|G|B|Y'] 連結配列のブロック番号。 */
 interface ChannelDef {
-  key: keyof CurveEdits;
+  key: RgbCurveKey;
   /** タブ文言（master のみ i18n。R/G/B は字義通り）。 */
   label: string;
   i18n: boolean;

@@ -13,7 +13,7 @@ import {
   smoothGrid,
   trilinearSample,
 } from '../src/core/lut.ts';
-import { CURVE_BINS, HIST_BINS } from '../src/core/analysis.ts';
+import { CURVE_BINS, HIST_BINS, HIST_BLOCKS } from '../src/core/analysis.ts';
 import type { CurveEdits } from '../src/core/curve.ts';
 import { buildMatchTransform } from '../src/core/pipeline.ts';
 import { computeColorStats, extractValidSamples, regularizedCovInv } from '../src/core/stats.ts';
@@ -533,8 +533,8 @@ describe('残差カーブ統合（§5.7）', () => {
       baseOptions({ mode: 'C', size: 17 }),
     );
     expect(effectiveCurves).toHaveLength(4 * CURVE_BINS);
-    expect(histSource).toHaveLength(4 * HIST_BINS);
-    expect(histResult).toHaveLength(4 * HIST_BINS);
+    expect(histSource).toHaveLength(HIST_BLOCKS * HIST_BINS);
+    expect(histResult).toHaveLength(HIST_BLOCKS * HIST_BINS);
   });
 });
 
@@ -630,8 +630,8 @@ describe('恒等基底：Reference なしの手動 LUT 作成（フェーズ1）
     const sample = { alphaThreshold: 0.5, blackThreshold: 0.1 };
     const res = generateLut(px, null, 4, idOpts({ sample }));
     expect(res.effectiveCurves).toHaveLength(4 * CURVE_BINS);
-    expect(res.histSource).toHaveLength(4 * HIST_BINS);
-    expect(res.histResult).toHaveLength(4 * HIST_BINS);
+    expect(res.histSource).toHaveLength(HIST_BLOCKS * HIST_BINS);
+    expect(res.histResult).toHaveLength(HIST_BLOCKS * HIST_BINS);
 
     // R ブロックのシャドウ域（低位ビン）に度数があること＝暗部が除外されていない。
     const shadowSum = (hist: Float32Array): number => {
