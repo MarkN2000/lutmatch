@@ -315,10 +315,6 @@ body {
 }
 
 /* ---------- コントロール群 ---------- */
-.control-group {
-  margin-bottom: 14px;
-}
-.control-group__label,
 .exportbar__label {
   font-size: 12px;
   color: var(--text-dim);

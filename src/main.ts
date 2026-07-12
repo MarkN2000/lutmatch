@@ -122,14 +122,16 @@ append(inputsBlock, dzRow, sampleBtn, hintBanner);
 // ---- コントロールブロック ----
 const controlsBlock = el('section', 'panel block-controls');
 
-const modeSection = el('div', 'control-group');
-const modeLabel = el('div', 'control-group__label');
+// 「自動調整」アコーディオン（モード3択・強度・ノイズ抑制、§6.0 原則3）。
+// 見出しはセグメント自身が持つ aria-label と同じ i18n キー `modeLabel` を再利用し、
+// 見出しラベルの重複表示を避ける（旧 modeLabel 単独ラベル div は廃止）。
+const autoAccordion = createAccordion('modeLabel');
+
 const modeSegment = createModeSegment(state.mode, (mode) => {
   state.mode = mode;
   updateNoiseSuppressionDisabled();
   scheduleRecompute();
 });
-append(modeSection, modeLabel, modeSegment.element);
 
 const strengthSlider = createSlider({
   labelKey: 'strengthLabel',
@@ -147,8 +149,11 @@ const strengthSlider = createSlider({
   onDragState: setDragState,
 });
 
-// ノイズ抑制は常時表示（強度の隣・§6.0）。モード A では無効化される（updateNoiseSuppressionDisabled）。
+// ノイズ抑制は「自動調整」アコーディオン内・強度の隣（§6.0）。モード A では無効化される（updateNoiseSuppressionDisabled）。
 const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
+
+// 「自動調整」の 3 コントロールをアコーディオン本体へ格納する（配置順は従来どおり）。
+append(autoAccordion.body, modeSegment.element, strengthSlider.element, noiseSuppressionSlider.element);
 
 // カーブエディタ（独立アコーディオン・既定閉／§5.7・§6.1）。ノイズ抑制と「詳細調整」の間に置く。
 const curves = createCurves();
@@ -207,7 +212,7 @@ const resetBtn = el('button', 'btn btn--ghost reset-btn');
 resetBtn.type = 'button';
 resetBtn.addEventListener('click', resetAdjustments);
 
-append(controlsBlock, modeSection, strengthSlider.element, noiseSuppressionSlider.element, curves.element, accordion.element, resetBtn);
+append(controlsBlock, autoAccordion.element, curves.element, accordion.element, resetBtn);
 
 // ---- 通知（トースト）・ヘルプ ----
 // トーストはプレビューのバックエンド切替コールバックが参照するため先に生成する。
@@ -247,7 +252,6 @@ function refreshStaticText(): void {
   langBtn.setAttribute('aria-label', t('langToggleAria'));
   helpBtn.setAttribute('aria-label', t('helpAria'));
   helpBtn.title = t('helpAria');
-  modeLabel.textContent = t('modeLabel');
   sampleBtn.textContent = t('sampleButton');
   resetBtn.textContent = t('resetButton');
   detailsResetBtn.textContent = t('detailsResetButton');
@@ -394,6 +398,9 @@ function setImage(role: Role, loaded: LoadedImage): void {
   } else {
     dropReference.setThumbnail(loaded.previewBitmap);
     preview.setReferenceBitmap(loaded.previewBitmap);
+    // Reference 投入（未投入→投入の遷移）で「自動調整」アコーディオンを自動オープンする（設計確定・§6.2）。
+    // それ以外のタイミング（既に投入済みへの差し替え等）では自動で開閉しない。
+    if (prev == null) autoAccordion.setOpen(true);
   }
   updateUiState();
   scheduleRecompute();
@@ -406,6 +413,7 @@ function setImage(role: Role, loaded: LoadedImage): void {
  */
 function clearImage(role: Role): void {
   ++state.loadGeneration[role]; // 進行中デコードを後勝ち無効化
+  const prev = state[role];
   state[role]?.dispose();
   state[role] = null;
   if (role === 'source') {
@@ -417,6 +425,8 @@ function clearImage(role: Role): void {
   } else {
     dropReference.setThumbnail(null);
     preview.setReferenceBitmap(null);
+    // Reference 削除（投入→未投入の遷移）で「自動調整」アコーディオンを自動クローズする（設計確定・§6.2）。
+    if (prev != null) autoAccordion.setOpen(false);
   }
   updateUiState();
   scheduleRecompute();
