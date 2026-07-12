@@ -222,7 +222,7 @@ body {
 }
 @media (min-width: 1120px) {
   .app-main {
-    --rail: 280px;
+    --rail: clamp(300px, 28vw, 420px);
     gap: 18px;
     padding: 18px;
   }
@@ -434,7 +434,8 @@ body {
   padding: 0 2px 6px;
 }
 
-.reset-btn {
+.reset-btn,
+.details-reset-btn {
   width: 100%;
   margin-top: 4px;
 }
@@ -877,15 +878,15 @@ body {
 }
 
 /* ---------- カーブエディタ ---------- */
+/* 1段目：タブ列のみで横幅いっぱい使う。2段目：アクション行（チャンネル別/全体リセット）。 */
 .curves__head {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 8px;
 }
 .curves__tabs {
   display: flex;
-  flex: 1;
   min-width: 0;
   gap: 3px;
   background: var(--bg-elev2);
@@ -910,11 +911,23 @@ body {
   color: var(--accent-contrast);
   font-weight: 600;
 }
+/* アクション行：主＝現在チャンネルのリセット（左）／従＝全カーブリセット（右、小型ゴースト） */
+.curves__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.curves__reset-channel {
+  flex: 0 0 auto;
+}
 .curves__reset {
   flex: 0 0 auto;
   font-size: 12.5px;
   padding: 8px 10px;
   white-space: nowrap;
+  opacity: 0.85;
 }
 .curves__canvas-host {
   width: 100%;

@@ -58,7 +58,8 @@ export const en: Record<MessageKey, string> = {
   tintTooltip: 'Green⇄magenta shift (Lab a* axis).',
   blackLabel: 'Black protect',
   blackTooltip: 'Excludes dark pixels from the match to keep deep blacks.',
-  resetButton: 'Reset adjustments',
+  resetButton: 'Reset all',
+  detailsResetButton: 'Reset advanced settings',
 
   // ---- Curve editor ----
   curvesTitle: 'Curves',
@@ -66,7 +67,8 @@ export const en: Record<MessageKey, string> = {
   curvesTabHue: 'Hue',
   curvesTabHueSat: 'Sat',
   curvesTabsAria: 'Curve channel',
-  curvesReset: 'Reset curves',
+  curvesReset: 'Reset all curves',
+  curvesResetChannelTemplate: 'Reset {name}',
   curvesCanvasAria: 'Curve editor (tap to add a point, drag to edit, double-tap to delete)',
 
   // ---- Preview ----

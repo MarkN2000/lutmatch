@@ -57,7 +57,8 @@ export const ja = {
   tintTooltip: '緑⇄マゼンタの色みを調整します（Lab の a* 軸）。',
   blackLabel: 'ブラック保護',
   blackTooltip: '指定輝度以下を統計マッチから除外し、締まった黒を保ちます。',
-  resetButton: '手動調整をリセット',
+  resetButton: 'すべてリセット',
+  detailsResetButton: '詳細調整をリセット',
 
   // ---- カーブエディタ（§5.7 / §6.1）----
   curvesTitle: 'カーブ',
@@ -65,7 +66,8 @@ export const ja = {
   curvesTabHue: '色相',
   curvesTabHueSat: '彩度',
   curvesTabsAria: 'カーブのチャンネル',
-  curvesReset: 'カーブをリセット',
+  curvesReset: 'すべてのカーブをリセット',
+  curvesResetChannelTemplate: '「{name}」をリセット',
   curvesCanvasAria: 'カーブエディタ（点を追加・ドラッグで編集、ダブルタップで削除）',
 
   // ---- プレビュー（§4.5）----

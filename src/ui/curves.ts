@@ -214,6 +214,7 @@ export function createCurves(): CurvesHandle {
   const changeCbs: Array<() => void> = [];
   const dragCbs: Array<(dragging: boolean) => void> = [];
   const emitChange = (): void => {
+    updateResetButtonsState(); // 点追加・ドラッグ・削除ごとに disabled 状態を同期する。
     for (const cb of changeCbs) cb();
   };
   const emitDrag = (d: boolean): void => {
@@ -237,11 +238,17 @@ export function createCurves(): CurvesHandle {
   tabRow.setAttribute('role', 'tablist');
   const tabButtons: HTMLButtonElement[] = [];
 
+  // 主＝現在選択中チャンネルのみのリセット（動的ラベル）。従＝全チャンネル一括リセット。
+  const channelResetBtn = el('button', 'btn btn--ghost curves__reset-channel');
+  channelResetBtn.type = 'button';
   const resetBtn = el('button', 'btn btn--ghost curves__reset');
   resetBtn.type = 'button';
 
+  const actionsRow = el('div', 'curves__actions');
+  append(actionsRow, channelResetBtn, resetBtn);
+
   const head = el('div', 'curves__head');
-  append(head, tabRow, resetBtn);
+  append(head, tabRow, actionsRow);
 
   const canvasHost = el('div', 'curves__canvas-host');
   const canvas = el('canvas', 'curves__canvas');
@@ -821,6 +828,30 @@ export function createCurves(): CurvesHandle {
     });
   };
 
+  /** チャンネルが未編集（＝リセットしても変化しない）か。RGB 系は端点2点かつ全dy=0、
+   *  色相系は点0個または全dy=0 のとき未編集とみなす。 */
+  const isChannelEdited = (key: CurveKey): boolean => {
+    const pts = edits[key] ?? [];
+    if (key === 'hue' || key === 'hueSat') {
+      return pts.length > 0 && pts.some((p) => p.dy !== 0);
+    }
+    return pts.length !== 2 || pts.some((p) => p.dy !== 0);
+  };
+
+  /** 現在タブのリセットボタン・全体リセットボタンの disabled を編集状態から同期する。 */
+  const updateResetButtonsState = (): void => {
+    const curKey = CHANNELS[selected].key;
+    channelResetBtn.disabled = disabled || !isChannelEdited(curKey);
+    resetBtn.disabled = disabled || !CHANNELS.some((c) => isChannelEdited(c.key));
+  };
+
+  /** 現在タブのチャンネル名を差し込んだ「◯◯をリセット」ラベルへ更新する。 */
+  const updateChannelResetLabel = (): void => {
+    const def = CHANNELS[selected];
+    const name = def.i18nKey ? t(def.i18nKey) : def.label;
+    channelResetBtn.textContent = t('curvesResetChannelTemplate').replace('{name}', name);
+  };
+
   CHANNELS.forEach((_def, i) => {
     const btn = el('button', 'curves__tab');
     btn.type = 'button';
@@ -830,14 +861,31 @@ export function createCurves(): CurvesHandle {
       selected = i;
       hoverPoint = null;
       syncTabs();
+      updateChannelResetLabel();
+      updateResetButtonsState();
       scheduleDraw();
     });
     tabButtons.push(btn);
     append(tabRow, btn);
   });
 
+  /** 現在タブのチャンネルのみを初期状態へ戻す（主リセット）。onChange は常に発火する。 */
+  const resetChannel = (key: CurveKey): void => {
+    edits[key] = key === 'hue' || key === 'hueSat' ? [] : makeEmptyChannel();
+    dragPoint = null;
+    hoverPoint = null;
+    lastTapPoint = null;
+    scheduleDraw();
+    emitChange();
+  };
+
+  channelResetBtn.addEventListener('click', () => {
+    if (disabled || channelResetBtn.disabled) return;
+    resetChannel(CHANNELS[selected].key);
+  });
+
   resetBtn.addEventListener('click', () => {
-    if (disabled) return;
+    if (disabled || resetBtn.disabled) return;
     doReset(false);
   });
 
@@ -852,6 +900,7 @@ export function createCurves(): CurvesHandle {
     hoverPoint = null;
     lastTapPoint = null;
     scheduleDraw();
+    updateResetButtonsState(); // silent（main.ts の全体リセット経由）でも disabled 表示は同期させる。
     if (!silent) emitChange();
   };
 
@@ -862,6 +911,7 @@ export function createCurves(): CurvesHandle {
       btn.textContent = def.i18nKey ? t(def.i18nKey) : def.label;
     });
     resetBtn.textContent = t('curvesReset');
+    updateChannelResetLabel();
     tabRow.setAttribute('aria-label', t('curvesTabsAria'));
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', t('curvesCanvasAria'));
@@ -869,6 +919,7 @@ export function createCurves(): CurvesHandle {
   onLangChange(refreshText);
   refreshText();
   syncTabs();
+  updateResetButtonsState();
 
   // ---- ResizeObserver（開いた瞬間の 0→N とウィンドウリサイズで初回・再描画）----
   if (typeof ResizeObserver !== 'undefined') {
@@ -920,6 +971,7 @@ export function createCurves(): CurvesHandle {
         dragPoint = null;
         hoverPoint = null;
       }
+      updateResetButtonsState();
     },
   };
 }

@@ -180,18 +180,28 @@ const manualSliders: SliderHandle[] = [
 ];
 const statSliders: SliderHandle[] = [smoothingSlider, blackSlider];
 
+// キー付きで保持し、詳細調整の一括リセット（DETAIL_SLIDERS）と DOM 配置の両方で使い回す（DRY）。
+type DetailKey = 'smoothing' | 'exposure' | 'contrast' | 'saturation' | 'temperature' | 'tint' | 'blackProtection';
+const DETAIL_SLIDERS: Array<{ slider: SliderHandle; key: DetailKey }> = [
+  { slider: smoothingSlider, key: 'smoothing' },
+  { slider: exposureSlider, key: 'exposure' },
+  { slider: contrastSlider, key: 'contrast' },
+  { slider: saturationSlider, key: 'saturation' },
+  { slider: temperatureSlider, key: 'temperature' },
+  { slider: tintSlider, key: 'tint' },
+  { slider: blackSlider, key: 'blackProtection' },
+];
+
 // DOM への配置は従来の表示順（スムージング → 露出 → … → ブラック保護）を維持する。
-for (const s of [
-  smoothingSlider,
-  exposureSlider,
-  contrastSlider,
-  saturationSlider,
-  temperatureSlider,
-  tintSlider,
-  blackSlider,
-]) {
-  append(accordion.body, s.element);
+for (const { slider } of DETAIL_SLIDERS) {
+  append(accordion.body, slider.element);
 }
+
+// 「詳細調整をリセット」：詳細 7 項目のみを既定値へ戻す（強度・ノイズ抑制・カーブは触らない）。
+const detailsResetBtn = el('button', 'btn btn--ghost details-reset-btn');
+detailsResetBtn.type = 'button';
+detailsResetBtn.addEventListener('click', resetDetails);
+append(accordion.body, detailsResetBtn);
 
 const resetBtn = el('button', 'btn btn--ghost reset-btn');
 resetBtn.type = 'button';
@@ -240,6 +250,7 @@ function refreshStaticText(): void {
   modeLabel.textContent = t('modeLabel');
   sampleBtn.textContent = t('sampleButton');
   resetBtn.textContent = t('resetButton');
+  detailsResetBtn.textContent = t('detailsResetButton');
   hintText.textContent = t('firstHint');
 }
 onLangChange(refreshStaticText);
@@ -321,6 +332,8 @@ function updateUiState(): void {
   curves.setDisabled(!s);
   resetBtn.classList.toggle('is-disabled', !s);
   (resetBtn as HTMLButtonElement).disabled = !s;
+  detailsResetBtn.classList.toggle('is-disabled', !s);
+  (detailsResetBtn as HTMLButtonElement).disabled = !s;
   exportBar.setDisabled(!s || state.currentLut == null);
 
   // --- both ゲート＋理由 needsReferenceReason: モード・強度・スムージング・ブラック保護 ---
@@ -547,29 +560,34 @@ async function savePng(): Promise<void> {
 }
 
 // ============================================================
-// リセット（手動調整のみ・§4.4）
+// リセット（3 段階のスコープ・§4.4/§6.2）
 // ============================================================
 
+/**
+ * 詳細調整アコーディオンの 7 項目（スムージング/露出/コントラスト/彩度/色温度/Tint/ブラック保護）
+ * のみを既定値へ戻す。強度・ノイズ抑制・カーブは対象外。resetAdjustments と共通化（DRY）。
+ * silent（setValue の第 2 引数）で個々の onInput 発火を抑え、呼び出し側で一度だけ scheduleRecompute する。
+ */
+function resetDetailSliders(): void {
+  for (const { slider, key } of DETAIL_SLIDERS) {
+    state[key] = DEFAULTS[key];
+    slider.setValue(DEFAULTS[key], true);
+  }
+}
+
+/** 「詳細調整をリセット」：詳細 7 項目のみ（強度・ノイズ抑制・カーブは維持）。 */
+function resetDetails(): void {
+  resetDetailSliders();
+  scheduleRecompute();
+}
+
+/** 「すべてリセット」：強度・ノイズ抑制・詳細 7 項目・カーブ編集をまとめて初期化（自動マッチ結果は保持）。 */
 function resetAdjustments(): void {
   state.strength = DEFAULTS.strength;
-  state.smoothing = DEFAULTS.smoothing;
-  state.noiseSuppression = DEFAULTS.noiseSuppression;
-  state.exposure = DEFAULTS.exposure;
-  state.contrast = DEFAULTS.contrast;
-  state.saturation = DEFAULTS.saturation;
-  state.temperature = DEFAULTS.temperature;
-  state.tint = DEFAULTS.tint;
-  state.blackProtection = DEFAULTS.blackProtection;
-
   strengthSlider.setValue(DEFAULTS.strength, true);
-  smoothingSlider.setValue(DEFAULTS.smoothing, true);
+  state.noiseSuppression = DEFAULTS.noiseSuppression;
   noiseSuppressionSlider.setValue(DEFAULTS.noiseSuppression, true);
-  exposureSlider.setValue(DEFAULTS.exposure, true);
-  contrastSlider.setValue(DEFAULTS.contrast, true);
-  saturationSlider.setValue(DEFAULTS.saturation, true);
-  temperatureSlider.setValue(DEFAULTS.temperature, true);
-  tintSlider.setValue(DEFAULTS.tint, true);
-  blackSlider.setValue(DEFAULTS.blackProtection, true);
+  resetDetailSliders();
   // カーブ編集も破棄する。silent で onChange を発火させず、末尾の単一 scheduleRecompute に集約する
   // （二重再計算を防止）。
   curves.reset({ silent: true });
