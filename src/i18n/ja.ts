@@ -62,6 +62,8 @@ export const ja = {
   // ---- カーブエディタ（§5.7 / §6.1）----
   curvesTitle: 'カーブ',
   curvesTabMaster: 'マスター',
+  curvesTabHue: '色相',
+  curvesTabHueSat: '彩度',
   curvesTabsAria: 'カーブのチャンネル',
   curvesReset: 'カーブをリセット',
   curvesCanvasAria: 'カーブエディタ（点を追加・ドラッグで編集、ダブルタップで削除）',

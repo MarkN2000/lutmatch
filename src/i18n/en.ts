@@ -63,6 +63,8 @@ export const en: Record<MessageKey, string> = {
   // ---- Curve editor ----
   curvesTitle: 'Curves',
   curvesTabMaster: 'Master',
+  curvesTabHue: 'Hue',
+  curvesTabHueSat: 'Sat',
   curvesTabsAria: 'Curve channel',
   curvesReset: 'Reset curves',
   curvesCanvasAria: 'Curve editor (tap to add a point, drag to edit, double-tap to delete)',
