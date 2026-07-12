@@ -26,8 +26,8 @@ export const ja = {
   referenceOptionalHint: '入れると自動で色を合わせます（任意）',
   needsReferenceReason: '参考画像を入れると使えます',
 
-  // ---- 自動マッチ（モード・§4.2）----
-  modeLabel: '自動マッチ',
+  // ---- 自動調整（自動マッチのモード・§4.2）----
+  modeLabel: '自動調整',
   modeAName: 'ナチュラル',
   modeBName: '忠実',
   modeCName: 'バランス',
@@ -37,7 +37,7 @@ export const ja = {
 
   // ---- 強度・詳細調整（§4.4）----
   strengthLabel: '強度',
-  strengthTooltip: '自動マッチ結果と元の色のブレンド率。手動調整には影響しません。',
+  strengthTooltip: '自動調整の結果と元の色のブレンド率。手動調整には影響しません。',
   detailsTitle: '詳細調整',
   smoothingLabel: 'スムージング',
   smoothingTooltip: 'LUT を 3D 平滑化してバンディング・色飛びを抑えます。',
