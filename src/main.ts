@@ -234,13 +234,17 @@ const exportBar = createExportBar({
   onSavePng: () => void savePng(),
   onSaveResonite: () => void saveResonite(),
 });
-exportBar.element.classList.add('block-exportbar');
 
 // ---- 全体組み立て ----
 const main = el('main', 'app-main');
-append(main, inputsBlock, controlsBlock, preview.element, exportBar.element);
+append(main, inputsBlock, controlsBlock, preview.element);
 
-append(appRoot, header, main, toast.element, help.element);
+append(appRoot, header, main, exportBar.element, toast.element, help.element);
+
+const exportBarHeight = new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--exportbar-h', `${exportBar.element.offsetHeight}px`);
+});
+exportBarHeight.observe(exportBar.element);
 
 // ============================================================
 // i18n テキスト適用

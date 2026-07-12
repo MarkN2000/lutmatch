@@ -162,7 +162,7 @@ body {
   gap: 12px;
   padding: 12px;
   grid-template-columns: 1fr;
-  grid-template-areas: 'inputs' 'preview' 'controls' 'exportbar';
+  grid-template-areas: 'inputs' 'preview' 'controls';
 }
 .block-inputs {
   grid-area: inputs;
@@ -173,9 +173,6 @@ body {
 .block-preview {
   grid-area: preview;
 }
-.block-exportbar {
-  grid-area: exportbar;
-}
 
 .panel {
   background: var(--bg-elev);
@@ -184,7 +181,7 @@ body {
   padding: 14px;
 }
 
-/* モバイル：プレビュー上部 sticky（高さは dvh 基準で最大 40%）＋書き出しバー下部 sticky */
+/* モバイル：プレビュー上部 sticky（高さは dvh 基準で最大 40%） */
 @media (max-width: 767px) {
   .block-preview {
     position: sticky;
@@ -196,11 +193,6 @@ body {
     min-height: 0;
     max-height: calc(40dvh - 44px);
   }
-  .block-exportbar {
-    position: sticky;
-    bottom: 0;
-    z-index: 9;
-  }
 }
 
 /* タブレット / デスクトップ：2 カラム */
@@ -210,8 +202,7 @@ body {
     grid-template-columns: var(--rail) minmax(0, 1fr);
     grid-template-areas:
       'inputs   preview'
-      'controls preview'
-      'controls exportbar';
+      'controls preview';
     align-items: start;
   }
   .block-preview {
@@ -618,13 +609,19 @@ body {
   gap: 10px;
   flex-wrap: wrap;
   background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 0;
+  border-top: 1px solid var(--border);
   padding: 10px 12px;
-  margin-top: 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
+  box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.25);
 }
-.block-exportbar.exportbar {
-  margin-top: 12px;
+@media (min-width: 1120px) {
+  .exportbar {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
 }
 .exportbar__opt-toggle {
   display: none;
@@ -697,8 +694,8 @@ body {
   align-items: center;
 }
 
-/* モバイル：オプションは展開トグルで表示、DL はワンタップ */
-@media (max-width: 767px) {
+/* <1120px：オプションは展開トグルで表示、DL はワンタップ */
+@media (max-width: 1119px) {
   .exportbar__opt-toggle {
     display: inline-flex;
     align-items: center;
@@ -731,7 +728,7 @@ body {
 .toast-host {
   position: fixed;
   left: 50%;
-  bottom: 16px;
+  bottom: calc(var(--exportbar-h, 0px) + 16px);
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
