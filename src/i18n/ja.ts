@@ -8,7 +8,7 @@
 export const ja = {
   // ---- アプリ全体・ヘッダー ----
   appTitle: 'LUT Match',
-  appTagline: '2 枚の画像から色を合わせる 3D LUT を自動生成',
+  appTagline: 'ブラウザで作る 3D LUT メーカー',
   langToggle: 'English',
   langToggleAria: '言語を英語に切り替える',
   helpAria: '使い方を表示',

@@ -10,7 +10,7 @@ import type { MessageKey } from './index.ts';
 export const en: Record<MessageKey, string> = {
   // ---- App / header ----
   appTitle: 'LUT Match',
-  appTagline: 'Auto-generate a color-matching 3D LUT from two images',
+  appTagline: 'A 3D LUT maker that runs in your browser',
   langToggle: '日本語',
   langToggleAria: 'Switch language to Japanese',
   helpAria: 'Show help',
