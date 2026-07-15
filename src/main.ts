@@ -549,6 +549,7 @@ async function downloadCube(): Promise<void> {
     // lut.slice() で複製を渡す（serializeCube は buffer を転送＝neuter するため）。
     const text = await worker.serializeCube(lut.slice(), state.currentLutSize, title);
     triggerDownload(new Blob([text], { type: 'text/plain' }), filename);
+    toast.show(t('toastLutFree'), 'info'); // 生成 LUT は権利フリー（CC0・§4.6）
   } catch (err) {
     if (!(err instanceof SupersededError)) toast.show(t('errGenerate'), 'error');
   } finally {
@@ -652,6 +653,7 @@ async function saveResonite(): Promise<void> {
     });
     // SharedArrayBuffer は不使用（§3）のため BlobPart へ narrow。
     triggerDownload(new Blob([pkg as Uint8Array<ArrayBuffer>], { type: 'application/octet-stream' }), filename);
+    toast.show(t('toastLutFree'), 'info'); // 生成 LUT は権利フリー（CC0・§4.6）
   } catch {
     toast.show(t('errResoniteExport'), 'error');
   } finally {

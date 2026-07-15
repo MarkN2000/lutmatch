@@ -97,6 +97,7 @@ export const en: Record<MessageKey, string> = {
   errResoniteExport: 'Failed to export the Resonite package.',
   warnFallback: 'Statistics were unstable, so a simplified (mean-shift) match was used.',
   warnCanvas2d: 'WebGL is unavailable, so Canvas 2D rendering is used.',
+  toastLutFree: 'Downloaded. This LUT is free to use (CC0, no credit required).',
   toastClose: 'Close',
 
   // ---- Help modal ----
@@ -110,6 +111,9 @@ export const en: Record<MessageKey, string> = {
   helpRangeTitle: 'What a LUT can do',
   helpRangeBody:
     'A LUT only remaps colors. It cannot reproduce spatial effects such as grain, blur, or vignetting. The closer the two subjects are, the better the result.',
+  helpLicenseTitle: 'Rights to exported LUTs',
+  helpLicenseBody:
+    'This app claims no rights to the LUTs you generate (CC0). Use them freely, including commercially — no credit required.',
   helpClose: 'Close',
 
   firstHint:

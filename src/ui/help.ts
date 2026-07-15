@@ -60,12 +60,18 @@ export function createHelpModal(): HelpModalHandle {
   const rangeBody = el('p', 'help-range__body');
   append(rangeBox, rangeTitle, rangeBody);
 
+  // 書き出した LUT の権利（CC0・§4.6）。「LUT が扱える範囲」と同じ注記ボックスを流用。
+  const licenseBox = el('div', 'help-range');
+  const licenseTitle = el('h3', 'help-range__title');
+  const licenseBody = el('p', 'help-range__body');
+  append(licenseBox, licenseTitle, licenseBody);
+
   const footer = el('div', 'modal__footer');
   const okBtn = el('button', 'btn btn--primary');
   okBtn.type = 'button';
   append(footer, okBtn);
 
-  append(dialog, header, steps, rangeBox, footer);
+  append(dialog, header, steps, rangeBox, licenseBox, footer);
   append(overlay, dialog);
 
   const refreshText = (): void => {
@@ -79,6 +85,8 @@ export function createHelpModal(): HelpModalHandle {
     });
     rangeTitle.textContent = t('helpRangeTitle');
     rangeBody.textContent = t('helpRangeBody');
+    licenseTitle.textContent = t('helpLicenseTitle');
+    licenseBody.textContent = t('helpLicenseBody');
   };
 
   let lastFocused: HTMLElement | null = null;

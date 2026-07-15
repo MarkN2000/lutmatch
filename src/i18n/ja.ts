@@ -96,6 +96,7 @@ export const ja = {
   errResoniteExport: 'Resonite パッケージの書き出しに失敗しました。',
   warnFallback: '統計が不安定なため簡易マッチ（平均シフト）に切り替えました。',
   warnCanvas2d: 'WebGL が使えないため Canvas 2D 描画に切り替えました。',
+  toastLutFree: 'ダウンロードしました。この LUT は自由に使えます（CC0・クレジット不要）。',
   toastClose: '閉じる',
 
   // ---- ヘルプモーダル（§6.4）----
@@ -109,6 +110,9 @@ export const ja = {
   helpRangeTitle: 'LUT が扱える範囲',
   helpRangeBody:
     'LUT は「色の置き換え」だけを行います。粒状感（グレイン）・ボケ・ビネットなど空間的な効果は再現できません。被写体が近い 2 枚ほど良い結果になります。',
+  helpLicenseTitle: '書き出した LUT の権利',
+  helpLicenseBody:
+    '生成された LUT にこのアプリは一切の権利を主張しません（CC0）。商用利用を含め自由に使え、クレジット表記も不要です。',
   helpClose: '閉じる',
 
   // ヒント（§6.4）
