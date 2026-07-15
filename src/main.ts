@@ -92,13 +92,17 @@ const brandTag = el('p', 'app-header__tagline');
 append(brand, brandTitle, brandTag);
 
 const headerActions = el('div', 'app-header__actions');
+// 権利バッジ「出力 LUT は CC0」（768px 以上のみ表示・§6.4）。クリックでヘルプの詳細へ誘導。
+const licenseBadge = el('button', 'license-badge');
+licenseBadge.type = 'button';
+licenseBadge.addEventListener('click', () => help.open());
 const langBtn = el('button', 'btn btn--ghost app-header__lang');
 langBtn.type = 'button';
 langBtn.addEventListener('click', () => toggleLang());
 const helpBtn = el('button', 'btn btn--icon app-header__help');
 helpBtn.type = 'button';
 helpBtn.textContent = '?';
-append(headerActions, langBtn, helpBtn);
+append(headerActions, licenseBadge, langBtn, helpBtn);
 
 append(header, brand, headerActions);
 
@@ -272,6 +276,9 @@ function refreshStaticText(): void {
   detailsResetBtn.textContent = t('detailsResetButton');
   hintText.textContent = t('firstHint');
   refSampleLink.textContent = t('referenceSampleButton');
+  licenseBadge.textContent = t('licenseBadge');
+  licenseBadge.title = t('helpLicenseBody');
+  licenseBadge.setAttribute('aria-label', t('helpLicenseTitle'));
 }
 onLangChange(refreshStaticText);
 refreshStaticText();

@@ -10,6 +10,7 @@ export const ja = {
   appTitle: 'LUT Match',
   appTagline: 'ブラウザで作る 3D LUT メーカー',
   langToggle: 'English',
+  licenseBadge: '出力 LUT は CC0',
   langToggleAria: '言語を英語に切り替える',
   helpAria: '使い方を表示',
 

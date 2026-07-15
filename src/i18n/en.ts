@@ -12,6 +12,7 @@ export const en: Record<MessageKey, string> = {
   appTitle: 'LUT Match',
   appTagline: 'A 3D LUT maker that runs in your browser',
   langToggle: '日本語',
+  licenseBadge: 'Exported LUTs: CC0',
   langToggleAria: 'Switch language to Japanese',
   helpAria: 'Show help',
 
