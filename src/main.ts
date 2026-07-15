@@ -108,6 +108,11 @@ const dropReference: DropzoneHandle = createDropzone('reference', (f) => handleF
 // Reference 入口のガイド文言は常時「参考画像を入れると自動で色を合わせます（任意）」（§6.2-2）。
 dropReference.setHint('referenceOptionalHint');
 
+// サンプル参考画像リンク（Reference ドロップゾーン直後・§6.1/§6.2-1）。Source 側のサンプルはプレビュー空状態にある。
+const refSampleLink = el('button', 'sample-link');
+refSampleLink.type = 'button';
+refSampleLink.addEventListener('click', () => void loadSample('reference'));
+
 // 用途説明ヒント（§6.4）。Reference ドロップゾーン直下に常設表示（自動マッチ固有の注意書き）。
 const hintBanner = el('div', 'hint');
 const hintText = el('span', 'hint__text');
@@ -146,10 +151,11 @@ const strengthSlider = createSlider({
 // ノイズ抑制は「自動調整」アコーディオン内・強度の隣（§6.0）。モード A では無効化される（updateNoiseSuppressionDisabled）。
 const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
 
-// 「色合わせ」アコーディオン本体：先頭に Reference ドロップゾーン → 用途説明ヒント → モード3択 → 強度 → ノイズ抑制（§6.1）。
+// 「色合わせ」アコーディオン本体：先頭に Reference ドロップゾーン → サンプルリンク → 用途説明ヒント → モード3択 → 強度 → ノイズ抑制（§6.1）。
 append(
   autoAccordion.body,
   dropReference.element,
+  refSampleLink,
   hintBanner,
   modeSegment.element,
   strengthSlider.element,
@@ -224,7 +230,7 @@ helpBtn.addEventListener('click', () => help.open());
 // ---- プレビュー・書き出し ----
 const preview = createPreview({
   onSourceFile: (f) => void handleFile('source', f),
-  onSample: () => void loadSamples(),
+  onSample: () => void loadSample('source'),
   onRemoveSource: () => clearImage('source'),
 });
 preview.element.classList.add('block-preview');
@@ -265,6 +271,7 @@ function refreshStaticText(): void {
   resetBtn.textContent = t('resetButton');
   detailsResetBtn.textContent = t('detailsResetButton');
   hintText.textContent = t('firstHint');
+  refSampleLink.textContent = t('referenceSampleButton');
 }
 onLangChange(refreshStaticText);
 refreshStaticText();
@@ -406,8 +413,7 @@ function setImage(role: Role, loaded: LoadedImage): void {
   } else {
     dropReference.setThumbnail(loaded.previewBitmap);
     preview.setReferenceBitmap(loaded.previewBitmap);
-    // Reference 投入/削除に連動したアコーディオン自動開閉は廃止（§6.2-8）。
-    // 自動オープンは「サンプル画像で試す」実行時のみ（loadSamples）。
+    // アコーディオンの自動開閉は行わない（§6.2-8）。
   }
   updateUiState();
   scheduleRecompute();
@@ -436,14 +442,10 @@ function clearImage(role: Role): void {
   scheduleRecompute();
 }
 
-async function loadSamples(): Promise<void> {
-  // サンプル実行時は「色合わせ」アコーディオンを自動オープンし、参考画像の入口と効き方を見せる（§6.2-8）。
-  autoAccordion.setOpen(true);
+// サンプルは入力口ごとに分割して読み込む（§6.2-1）。アコーディオンの自動開閉は行わない（§6.2-8）。
+async function loadSample(role: Role): Promise<void> {
   const base = import.meta.env.BASE_URL;
-  await Promise.all([
-    handleFile('source', `${base}sample-source.webp`),
-    handleFile('reference', `${base}sample-reference.webp`),
-  ]);
+  await handleFile(role, `${base}sample-${role}.webp`);
 }
 
 // ============================================================
