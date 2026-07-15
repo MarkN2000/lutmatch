@@ -279,7 +279,9 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
 
   stage.addEventListener('pointerdown', (e) => {
     if (e.target === handle) return;
-    if (viewMode !== 'compare' || coarse) return;
+    // 空状態はステージ全体が Source ドロップゾーンなので、比較ドラッグを起動しない
+    // （pointer capture が emptyHint・サンプルリンクへのクリックを奪うのを防ぐ）。
+    if (viewMode !== 'compare' || coarse || !sourceBitmap) return;
     compareDragging = true;
     stage.setPointerCapture(e.pointerId);
     setSplit(splitFromClientX(e.clientX), 'draft');
