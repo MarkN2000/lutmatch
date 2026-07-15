@@ -200,7 +200,8 @@ function circDist(a: number, b: number): number {
 export function createCurves(): CurvesHandle {
   // ---- 状態 ----
   const edits = makeEmptyEdits();
-  let selected = 0; // CHANNELS のインデックス（既定＝マスター）。
+  // CHANNELS のインデックス。既定タブは「彩度」（Hue vs Sat・§6.3/§13）。
+  let selected = CHANNELS.findIndex((c) => c.key === 'hueSat');
   let disabled = false;
 
   // Worker から差し込まれる実効カーブ／ヒストグラム（未設定時は恒等 F・ヒスト無し）。
