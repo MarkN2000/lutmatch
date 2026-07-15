@@ -162,9 +162,21 @@ function makeEmptyChannel(): ControlPoint[] {
   ];
 }
 
+/** 色相/彩度タブの既定コントロールポイントの x 位置（中央・§6.3）。 */
+const PERIODIC_DEFAULT_X = 0.5;
+
+/**
+ * 色相/彩度チャンネル 1 本を初期状態で作る。点を置けることの手がかりとして
+ * 既定 1 点（x=0.5・dy=0）を配置する（§6.3/§13）。dy=0 のため出力は恒等で、
+ * コアの isEmptyEdits が空編集として扱う（ゴールデン不変・§5.8）。
+ */
+function makeDefaultPeriodicChannel(): ControlPoint[] {
+  return [{ x: PERIODIC_DEFAULT_X, dy: 0 }];
+}
+
 /**
  * 全チャンネルを初期状態にした CurveEdits を作る。
- * RGB は端点 2 点常設、色相/彩度は点 0 個（＝恒等・空編集）。
+ * RGB は端点 2 点常設、色相/彩度は既定 1 点（いずれも dy=0＝恒等・空編集）。
  */
 function makeEmptyEdits(): CurveEdits {
   return {
@@ -172,8 +184,8 @@ function makeEmptyEdits(): CurveEdits {
     r: makeEmptyChannel(),
     g: makeEmptyChannel(),
     b: makeEmptyChannel(),
-    hue: [],
-    hueSat: [],
+    hue: makeDefaultPeriodicChannel(),
+    hueSat: makeDefaultPeriodicChannel(),
   };
 }
 
@@ -830,11 +842,11 @@ export function createCurves(): CurvesHandle {
   };
 
   /** チャンネルが未編集（＝リセットしても変化しない）か。RGB 系は端点2点かつ全dy=0、
-   *  色相系は点0個または全dy=0 のとき未編集とみなす。 */
+   *  色相系は既定 1 点（x=0.5・dy=0）と一致するとき未編集とみなす。 */
   const isChannelEdited = (key: CurveKey): boolean => {
     const pts = edits[key] ?? [];
     if (key === 'hue' || key === 'hueSat') {
-      return pts.length > 0 && pts.some((p) => p.dy !== 0);
+      return pts.length !== 1 || pts[0].x !== PERIODIC_DEFAULT_X || pts[0].dy !== 0;
     }
     return pts.length !== 2 || pts.some((p) => p.dy !== 0);
   };
@@ -872,7 +884,7 @@ export function createCurves(): CurvesHandle {
 
   /** 現在タブのチャンネルのみを初期状態へ戻す（主リセット）。onChange は常に発火する。 */
   const resetChannel = (key: CurveKey): void => {
-    edits[key] = key === 'hue' || key === 'hueSat' ? [] : makeEmptyChannel();
+    edits[key] = key === 'hue' || key === 'hueSat' ? makeDefaultPeriodicChannel() : makeEmptyChannel();
     dragPoint = null;
     hoverPoint = null;
     lastTapPoint = null;
@@ -895,8 +907,8 @@ export function createCurves(): CurvesHandle {
     edits.r = makeEmptyChannel();
     edits.g = makeEmptyChannel();
     edits.b = makeEmptyChannel();
-    edits.hue = [];
-    edits.hueSat = [];
+    edits.hue = makeDefaultPeriodicChannel();
+    edits.hueSat = makeDefaultPeriodicChannel();
     dragPoint = null;
     hoverPoint = null;
     lastTapPoint = null;
