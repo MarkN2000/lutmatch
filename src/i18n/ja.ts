@@ -22,7 +22,6 @@ export const ja = {
   sampleButton: 'サンプル画像で試す',
   referenceSampleButton: 'サンプルの参考画像を使う',
   guideSource: 'まず元画像を選んでください',
-  guideReference: '参考画像を選んでください',
   removeImageAria: '画像を削除',
   replaceSourceButton: '差し替え',
   replaceSourceAria: '元画像を差し替え',

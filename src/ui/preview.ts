@@ -10,6 +10,7 @@
  */
 
 import { append, el, isCoarsePointer } from './dom.ts';
+import { attachFileDrop, createHiddenFileInput } from './fileInput.ts';
 import { onLangChange, t } from '../i18n/index.ts';
 import {
   createPreviewRenderer,
@@ -78,16 +79,8 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
   append(tabActions, replaceBtn, removeBtn);
 
   // Source 投入用の隠しファイル入力（空状態のクリック・「差し替え」ボタン共通）。
-  const fileInput = el('input');
-  fileInput.type = 'file';
-  fileInput.accept = 'image/jpeg,image/png,image/webp';
-  fileInput.className = 'visually-hidden';
-  const pickSource = (): void => fileInput.click();
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files?.[0];
-    if (file) onSourceFile(file);
-    fileInput.value = ''; // 同じファイル再選択を許可
-  });
+  const fileInput = createHiddenFileInput(onSourceFile);
+  const pickSource = (): void => fileInput.open();
 
   // ---- ステージ ----
   const stage = el('div', 'preview__stage');
@@ -110,26 +103,26 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
   append(progressBar, progressFill);
   append(overlay, skeleton, progressBar, progressText);
 
-  // 空状態＝Source ドロップゾーン（ガイド文言＋対応形式＋サンプルリンク・§4.1 / §6.2）。
+  // 空状態＝Source ドロップゾーン（ガイド文言＝実ボタン＋対応形式＋サンプルリンク・§4.1 / §6.2）。
+  // emptyHint 自体は装飾コンテナ。操作は内部の実 <button> がネイティブに担う
+  // （キーボード＝Enter/Space、フォーカスもボタン側）。
   const emptyHint = el('div', 'preview__empty');
-  emptyHint.setAttribute('role', 'button');
-  emptyHint.tabIndex = 0;
   const emptyInner = el('div', 'preview__empty-inner');
-  const emptyText = el('div', 'preview__empty-text');
+  // ガイド文言そのものを実ボタンにし、ネイティブのクリック/Enter/Space でファイル選択を開く。
+  const emptyPick = el('button', 'preview__empty-pick');
+  emptyPick.type = 'button';
   const emptyFormats = el('div', 'preview__empty-formats');
-  const sampleLink = el('button', 'preview__sample-link');
+  const sampleLink = el('button', 'sample-link preview__sample-link');
   sampleLink.type = 'button';
-  append(emptyInner, emptyText, emptyFormats, sampleLink);
+  append(emptyInner, emptyPick, emptyFormats, sampleLink);
   append(emptyHint, emptyInner);
 
-  // 空状態はクリック（タップ）でファイル選択。サンプルリンクは伝播を止めて別動作。
+  emptyPick.addEventListener('click', pickSource);
+
+  // 背景（ボタン以外）クリックでもファイル選択を開く。ボタン由来のクリックは
+  // 各ボタン自身のハンドラーへ委ね、ここでは二重発火させない。
   emptyHint.addEventListener('click', (e) => {
-    if (e.target === sampleLink) return;
-    pickSource();
-  });
-  emptyHint.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    e.preventDefault();
+    if ((e.target as Element).closest('button')) return;
     pickSource();
   });
   sampleLink.addEventListener('click', (e) => {
@@ -138,7 +131,7 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
   });
 
   append(stage, canvas, refThumb, handle, overlay, emptyHint);
-  append(root, tabs, stage, fileInput);
+  append(root, tabs, stage, fileInput.element);
 
   const renderer: PreviewRenderer = createPreviewRenderer(canvas);
   renderer.setViewMode(viewMode);
@@ -146,6 +139,8 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
   // ---- 状態 ----
   let sourceBitmap: ImageBitmap | null = null;
   let referenceBitmap: ImageBitmap | null = null;
+  // 空状態ガイド文言の誘導 ON/OFF（言語切替でも正しい方を表示するため保持）。
+  let sourceGuiding = false;
   let split = 0.5;
   let transform: ViewTransform = { scale: 1, offsetX: 0, offsetY: 0 };
 
@@ -212,21 +207,7 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
 
   // ---- Source 用の常時ドラッグ＆ドロップ（投入後も差し替え可・§4.1）----
   // クリックでのファイル選択は誤操作防止のため空状態限定（emptyHint のみ）。D&D は常時受け付ける。
-  stage.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    stage.classList.add('is-dragover');
-  });
-  stage.addEventListener('dragleave', (e) => {
-    // ステージ外へ出たときのみ解除（子要素間の移動では解除しない）。
-    if (e.relatedTarget instanceof Node && stage.contains(e.relatedTarget)) return;
-    stage.classList.remove('is-dragover');
-  });
-  stage.addEventListener('drop', (e) => {
-    e.preventDefault();
-    stage.classList.remove('is-dragover');
-    const file = e.dataTransfer?.files?.[0];
-    if (file) onSourceFile(file);
-  });
+  attachFileDrop(stage, onSourceFile);
 
   // ---- 比較スライダーのドラッグ ----
   const coarse = isCoarsePointer();
@@ -332,10 +313,10 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
       if (btn) btn.textContent = t(def.key);
     }
     handle.setAttribute('aria-label', t('compareHandleAria'));
-    emptyText.textContent = t('dropHint');
+    emptyPick.textContent = t(sourceGuiding ? 'guideSource' : 'dropHint');
+    emptyPick.setAttribute('aria-label', t('sourceTitle'));
     emptyFormats.textContent = t('dropFormats');
     sampleLink.textContent = t('sampleButton');
-    emptyHint.setAttribute('aria-label', t('sourceTitle'));
     replaceBtn.textContent = t('replaceSourceButton');
     replaceBtn.setAttribute('aria-label', t('replaceSourceAria'));
     removeBtn.setAttribute('aria-label', t('removeImageAria'));
@@ -381,10 +362,14 @@ export function createPreview(options: PreviewOptions): PreviewHandle {
       progressText.textContent = computing ? t('computing') : '';
     },
     setEnabled(enabled): void {
-      root.classList.toggle('is-disabled', !enabled);
+      // 操作できないのはタブ列のみ。空状態 CTA を減光対象から外すため、root ではなく
+      // タブ列へ直接クラスを当てる（CSS の選択子ではなくコード構造で保証する）。
+      tabs.classList.toggle('is-disabled', !enabled);
     },
     setSourceGuiding(guiding): void {
+      sourceGuiding = guiding;
       emptyHint.classList.toggle('is-guiding', guiding);
+      emptyPick.textContent = t(guiding ? 'guideSource' : 'dropHint');
     },
     onBackendChange(cb): void {
       renderer.onBackendChange(cb);

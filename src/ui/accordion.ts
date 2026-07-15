@@ -1,10 +1,10 @@
 /**
- * 汎用の開閉アコーディオン（§6.0 原則 3）。「自動調整」「カーブ」「詳細調整」の
+ * 汎用の開閉アコーディオン（§6.0 原則 3）。「色合わせ」「カーブ」「詳細調整」の
  * 各グループで共有する。
  *
  * ネイティブの開閉ではなくボタン + `aria-expanded` で実装し、既定は閉。
- * 中身は呼び出し側が `body` へ append する。`setOpen` でプログラムからの
- * 開閉も可能（例：「自動調整」は Reference の投入/削除に連動して自動開閉する）。
+ * 開閉はすべてユーザー操作（トグルボタン）で行う。中身は呼び出し側が
+ * `body` へ append する。
  */
 
 import { append, el } from './dom.ts';
@@ -14,8 +14,6 @@ export interface AccordionHandle {
   element: HTMLElement;
   /** 中身のコンテナ（ここに項目を追加する）。 */
   body: HTMLElement;
-  /** プログラムから開閉状態を設定する（ユーザーのクリックと同じ見た目・aria 属性になる）。 */
-  setOpen(open: boolean): void;
 }
 
 export function createAccordion(titleKey: MessageKey): AccordionHandle {
@@ -52,5 +50,5 @@ export function createAccordion(titleKey: MessageKey): AccordionHandle {
   refreshText();
 
   append(root, btn, body);
-  return { element: root, body, setOpen };
+  return { element: root, body };
 }

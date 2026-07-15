@@ -24,7 +24,6 @@ export const en: Record<MessageKey, string> = {
   sampleButton: 'Try a sample image',
   referenceSampleButton: 'Use a sample reference',
   guideSource: 'Choose a source image first',
-  guideReference: 'Now choose a reference image',
   removeImageAria: 'Remove image',
   replaceSourceButton: 'Replace',
   replaceSourceAria: 'Replace source image',
