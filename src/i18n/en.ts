@@ -25,11 +25,13 @@ export const en: Record<MessageKey, string> = {
   guideSource: 'Choose a source image first',
   guideReference: 'Now choose a reference image',
   removeImageAria: 'Remove image',
-  referenceOptionalHint: 'Optional: add to auto-match colors',
+  replaceSourceButton: 'Replace',
+  replaceSourceAria: 'Replace source image',
+  referenceOptionalHint: 'Add a reference image to auto-match colors (optional)',
   needsReferenceReason: 'Available when a reference image is added',
 
-  // ---- Auto match (modes) ----
-  modeLabel: 'Auto match',
+  // ---- Color match (modes) ----
+  modeLabel: 'Color Match',
   modeAName: 'Natural',
   modeBName: 'Faithful',
   modeCName: 'Balanced',
@@ -76,7 +78,6 @@ export const en: Record<MessageKey, string> = {
   tabResult: 'Result',
   tabCompare: 'Compare',
   referenceThumbAlt: 'Reference (target)',
-  previewEmpty: 'Choose images to see the preview here',
   computing: 'Computing…',
   compareHandleAria: 'Compare slider (use arrow keys)',
 

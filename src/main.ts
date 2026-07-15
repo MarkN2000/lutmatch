@@ -102,28 +102,21 @@ append(headerActions, langBtn, helpBtn);
 
 append(header, brand, headerActions);
 
-// ---- 入力ブロック ----
-const inputsBlock = el('section', 'panel block-inputs');
-const dzRow = el('div', 'dropzone-row');
-const dropSource: DropzoneHandle = createDropzone('source', (f) => handleFile('source', f), () => clearImage('source'));
+// ---- Reference ドロップゾーン＋用途説明ヒント（「色合わせ」アコーディオン内へ格納・§4.1 / §6.1）----
+// Source の入力口はプレビュー領域（空状態＝全面ドロップゾーン／タブバーの差し替え・削除）へ移った（§4.1）。
 const dropReference: DropzoneHandle = createDropzone('reference', (f) => handleFile('reference', f), () => clearImage('reference'));
-append(dzRow, dropSource.element, dropReference.element);
+// Reference 入口のガイド文言は常時「参考画像を入れると自動で色を合わせます（任意）」（§6.2-2）。
+dropReference.setHint('referenceOptionalHint');
 
-const sampleBtn = el('button', 'btn btn--ghost sample-btn');
-sampleBtn.type = 'button';
-sampleBtn.addEventListener('click', () => void loadSamples());
-
-// ヒント（§6.4）。常時表示。
+// 用途説明ヒント（§6.4）。Reference ドロップゾーン直下に常設表示（自動マッチ固有の注意書き）。
 const hintBanner = el('div', 'hint');
 const hintText = el('span', 'hint__text');
 append(hintBanner, hintText);
 
-append(inputsBlock, dzRow, sampleBtn, hintBanner);
-
 // ---- コントロールブロック ----
 const controlsBlock = el('section', 'panel block-controls');
 
-// 「自動調整」アコーディオン（モード3択・強度・ノイズ抑制、§6.0 原則3）。
+// 「色合わせ」アコーディオン（Reference ドロップゾーン・用途説明ヒント・モード3択・強度・ノイズ抑制、§6.0 原則3）。
 // 見出しはセグメント自身が持つ aria-label と同じ i18n キー `modeLabel` を再利用し、
 // 見出しラベルの重複表示を避ける（旧 modeLabel 単独ラベル div は廃止）。
 const autoAccordion = createAccordion('modeLabel');
@@ -153,8 +146,15 @@ const strengthSlider = createSlider({
 // ノイズ抑制は「自動調整」アコーディオン内・強度の隣（§6.0）。モード A では無効化される（updateNoiseSuppressionDisabled）。
 const noiseSuppressionSlider = makeParamSlider('noiseSuppressionLabel', 'noiseSuppressionTooltip', 0, 100, 1, DEFAULTS.noiseSuppression, (v) => `${Math.round(v)}`, (v) => (state.noiseSuppression = v));
 
-// 「自動調整」の 3 コントロールをアコーディオン本体へ格納する（配置順は従来どおり）。
-append(autoAccordion.body, modeSegment.element, strengthSlider.element, noiseSuppressionSlider.element);
+// 「色合わせ」アコーディオン本体：先頭に Reference ドロップゾーン → 用途説明ヒント → モード3択 → 強度 → ノイズ抑制（§6.1）。
+append(
+  autoAccordion.body,
+  dropReference.element,
+  hintBanner,
+  modeSegment.element,
+  strengthSlider.element,
+  noiseSuppressionSlider.element,
+);
 
 // カーブエディタ（独立アコーディオン・既定閉／§5.7・§6.1）。ノイズ抑制と「詳細調整」の間に置く。
 const curves = createCurves();
@@ -222,7 +222,11 @@ const help = createHelpModal();
 helpBtn.addEventListener('click', () => help.open());
 
 // ---- プレビュー・書き出し ----
-const preview = createPreview();
+const preview = createPreview({
+  onSourceFile: (f) => void handleFile('source', f),
+  onSample: () => void loadSamples(),
+  onRemoveSource: () => clearImage('source'),
+});
 preview.element.classList.add('block-preview');
 preview.onBackendChange((backend) => {
   if (backend === 'canvas2d') toast.show(t('warnCanvas2d'), 'warning');
@@ -237,7 +241,7 @@ const exportBar = createExportBar({
 
 // ---- 全体組み立て ----
 const main = el('main', 'app-main');
-append(main, inputsBlock, controlsBlock, preview.element);
+append(main, controlsBlock, preview.element);
 
 append(appRoot, header, main, exportBar.element, toast.element, help.element);
 
@@ -258,7 +262,6 @@ function refreshStaticText(): void {
   langBtn.setAttribute('aria-label', t('langToggleAria'));
   helpBtn.setAttribute('aria-label', t('helpAria'));
   helpBtn.title = t('helpAria');
-  sampleBtn.textContent = t('sampleButton');
   resetBtn.textContent = t('resetButton');
   detailsResetBtn.textContent = t('detailsResetButton');
   hintText.textContent = t('firstHint');
@@ -357,10 +360,9 @@ function updateUiState(): void {
 
   preview.setEnabled(s);
 
-  // 誘導ハイライトとヒント（§6.2）。点滅は「Reference あり・Source なし」の Source 誘導のみ。
-  dropSource.setGuiding(state.source == null && state.reference != null);
-  dropReference.setGuiding(false); // Reference の点滅誘導は廃止
-  dropReference.setHint(state.source != null && state.reference == null ? 'referenceOptionalHint' : null);
+  // 誘導ハイライト（§6.2-3）。点滅は「Reference あり・Source なし」の Source 誘導のみ。
+  // Source 入口はプレビュー空状態のドロップゾーンなので、点滅もそこへ出す。
+  preview.setSourceGuiding(state.source == null && state.reference != null);
 }
 
 // ============================================================
@@ -399,14 +401,13 @@ function setImage(role: Role, loaded: LoadedImage): void {
 
   state[role] = loaded;
   if (role === 'source') {
-    dropSource.setThumbnail(loaded.previewBitmap);
+    // Source のサムネイル表示はプレビュー領域が兼ねる（専用ドロップゾーンは廃止・§4.1）。
     preview.setSourceBitmap(loaded.previewBitmap);
   } else {
     dropReference.setThumbnail(loaded.previewBitmap);
     preview.setReferenceBitmap(loaded.previewBitmap);
-    // Reference 投入（未投入→投入の遷移）で「自動調整」アコーディオンを自動オープンする（設計確定・§6.2）。
-    // それ以外のタイミング（既に投入済みへの差し替え等）では自動で開閉しない。
-    if (prev == null) autoAccordion.setOpen(true);
+    // Reference 投入/削除に連動したアコーディオン自動開閉は廃止（§6.2-8）。
+    // 自動オープンは「サンプル画像で試す」実行時のみ（loadSamples）。
   }
   updateUiState();
   scheduleRecompute();
@@ -419,11 +420,9 @@ function setImage(role: Role, loaded: LoadedImage): void {
  */
 function clearImage(role: Role): void {
   ++state.loadGeneration[role]; // 進行中デコードを後勝ち無効化
-  const prev = state[role];
   state[role]?.dispose();
   state[role] = null;
   if (role === 'source') {
-    dropSource.setThumbnail(null);
     preview.setSourceBitmap(null);
     // recompute は !src で早期 return するため、ここで消さないと LUT が残留する。
     state.currentLut = null;
@@ -431,14 +430,15 @@ function clearImage(role: Role): void {
   } else {
     dropReference.setThumbnail(null);
     preview.setReferenceBitmap(null);
-    // Reference 削除（投入→未投入の遷移）で「自動調整」アコーディオンを自動クローズする（設計確定・§6.2）。
-    if (prev != null) autoAccordion.setOpen(false);
+    // Reference 投入/削除に連動したアコーディオン自動開閉は廃止（§6.2-8）。
   }
   updateUiState();
   scheduleRecompute();
 }
 
 async function loadSamples(): Promise<void> {
+  // サンプル実行時は「色合わせ」アコーディオンを自動オープンし、参考画像の入口と効き方を見せる（§6.2-8）。
+  autoAccordion.setOpen(true);
   const base = import.meta.env.BASE_URL;
   await Promise.all([
     handleFile('source', `${base}sample-source.webp`),
@@ -707,6 +707,11 @@ window.addEventListener('resize', () => {
     preview.resize();
   });
 });
+
+// ページ全体で dragover/drop の既定動作を抑止し、入力口の外へ誤ドロップしても
+// ブラウザが画像ファイルを開いてしまうのを防ぐ（各ドロップゾーンの処理は妨げない・§4.1）。
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
 
 updateUiState();
 // レイアウト確定後にプレビューのバッキングストアを合わせる。

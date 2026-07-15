@@ -162,10 +162,7 @@ body {
   gap: 12px;
   padding: 12px;
   grid-template-columns: 1fr;
-  grid-template-areas: 'inputs' 'preview' 'controls';
-}
-.block-inputs {
-  grid-area: inputs;
+  grid-template-areas: 'preview' 'controls';
 }
 .block-controls {
   grid-area: controls;
@@ -200,9 +197,7 @@ body {
   .app-main {
     --rail: 240px;
     grid-template-columns: var(--rail) minmax(0, 1fr);
-    grid-template-areas:
-      'inputs   preview'
-      'controls preview';
+    grid-template-areas: 'controls preview';
     align-items: start;
   }
   .block-preview {
@@ -220,13 +215,9 @@ body {
 }
 
 /* ---------- ドロップゾーン ---------- */
-.dropzone-row {
-  display: flex;
-  gap: 10px;
-}
+/* Reference ドロップゾーンは「色合わせ」アコーディオン内に単独配置される（レール幅にフィット）。 */
 .dropzone {
   position: relative;
-  flex: 1;
   min-width: 0;
   border: 1.5px dashed var(--border);
   border-radius: var(--radius);
@@ -286,12 +277,7 @@ body {
   border-style: solid;
 }
 
-.sample-btn {
-  width: 100%;
-  margin-top: 10px;
-}
-
-/* ヒント（常時表示） */
+/* 用途説明ヒント（「色合わせ」アコーディオン内・Reference ドロップゾーン直下に常設） */
 .hint {
   margin-top: 10px;
   display: flex;
@@ -436,8 +422,10 @@ body {
   border-radius: var(--radius);
   overflow: hidden;
 }
-.preview.is-disabled {
-  opacity: 0.6;
+/* Source 未投入時。空状態はプレビュー全面が Source ドロップゾーン（CTA）なので本体は減光せず、
+   操作できないタブ列のみ減光する（§4.1 / §6.2）。 */
+.preview.is-disabled .preview__tabs {
+  opacity: 0.5;
 }
 .preview__tabs {
   display: flex;
@@ -462,12 +450,55 @@ body {
   color: var(--text);
   font-weight: 600;
 }
+/* タブバー右端の Source 操作（差し替え / 削除）。Source 投入時のみ表示。 */
+.preview__tab-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.preview__action {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 10px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.preview__action:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.preview__action--remove {
+  padding: 6px 9px;
+  font-size: 15px;
+  line-height: 1;
+}
+.preview__action--remove:hover {
+  color: var(--accent-contrast);
+  background: var(--danger);
+  border-color: var(--danger);
+}
 .preview__stage {
   position: relative;
   flex: 1;
   min-height: 240px;
   background: #0e0f11;
   overflow: hidden;
+}
+/* 常時 D&D 受付（投入後も差し替え可）。ドラッグ中のフィードバック。 */
+.preview__stage.is-dragover::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: rgba(111, 159, 216, 0.12);
+  pointer-events: none;
+  z-index: 7;
 }
 .preview__canvas {
   display: block;
@@ -590,6 +621,7 @@ body {
   font-size: 12px;
   color: var(--text-dim);
 }
+/* 空状態＝Source ドロップゾーン（プレビュー全面・§4.1 / §6.2） */
 .preview__empty {
   position: absolute;
   inset: 0;
@@ -600,6 +632,56 @@ body {
   text-align: center;
   color: var(--text-dim);
   font-size: 13px;
+  cursor: pointer;
+  z-index: 5;
+}
+.preview__empty::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.12s, background 0.12s;
+  pointer-events: none;
+}
+.preview__empty:hover::before {
+  border-color: var(--accent);
+  background: rgba(111, 159, 216, 0.06);
+}
+.preview__empty.is-guiding::before {
+  border-color: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.preview__empty-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.preview__empty-text {
+  font-size: 13px;
+  color: var(--text);
+}
+.preview__empty-formats {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.preview__sample-link {
+  margin-top: 4px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  padding: 8px 12px;
+  min-height: var(--tap);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.preview__sample-link:hover {
+  color: var(--text);
 }
 
 /* ---------- 書き出しバー ---------- */

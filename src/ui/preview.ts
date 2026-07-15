@@ -29,7 +29,21 @@ export interface PreviewHandle {
   resize(): void;
   setComputing(computing: boolean, ratio?: number): void;
   setEnabled(enabled: boolean): void;
+  /** 空状態ガイド（Source ドロップゾーン）の点滅誘導 ON/OFF（§6.2-3 の Reference のみ投入時）。 */
+  setSourceGuiding(guiding: boolean): void;
   onBackendChange(cb: (backend: PreviewBackend) => void): void;
+}
+
+/**
+ * プレビューが Source の入力口を兼ねるためのコールバック（§4.1 / §6.1）。
+ * - onSourceFile: 空状態のクリック選択・常時 D&D・「差し替え」ボタンからのファイル投入
+ * - onSample: 空状態の「サンプル画像で試す」リンク
+ * - onRemoveSource: タブバーの削除（×）ボタン
+ */
+export interface PreviewOptions {
+  onSourceFile: (file: File) => void;
+  onSample: () => void;
+  onRemoveSource: () => void;
 }
 
 interface TabDef {
@@ -43,7 +57,8 @@ const TABS: TabDef[] = [
   { mode: 'compare', key: 'tabCompare' },
 ];
 
-export function createPreview(): PreviewHandle {
+export function createPreview(options: PreviewOptions): PreviewHandle {
+  const { onSourceFile, onSample, onRemoveSource } = options;
   const root = el('div', 'preview');
 
   // ---- タブ ----
@@ -51,6 +66,28 @@ export function createPreview(): PreviewHandle {
   tabs.setAttribute('role', 'tablist');
   let viewMode: PreviewViewMode = 'compare';
   const tabButtons = new Map<PreviewViewMode, HTMLButtonElement>();
+
+  // タブバー右端の Source 操作（差し替え / 削除）。Source 投入時のみ表示（§4.1 / §6.1）。
+  const tabActions = el('div', 'preview__tab-actions');
+  tabActions.hidden = true;
+  const replaceBtn = el('button', 'preview__action');
+  replaceBtn.type = 'button';
+  const removeBtn = el('button', 'preview__action preview__action--remove');
+  removeBtn.type = 'button';
+  removeBtn.textContent = '×';
+  append(tabActions, replaceBtn, removeBtn);
+
+  // Source 投入用の隠しファイル入力（空状態のクリック・「差し替え」ボタン共通）。
+  const fileInput = el('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/jpeg,image/png,image/webp';
+  fileInput.className = 'visually-hidden';
+  const pickSource = (): void => fileInput.click();
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) onSourceFile(file);
+    fileInput.value = ''; // 同じファイル再選択を許可
+  });
 
   // ---- ステージ ----
   const stage = el('div', 'preview__stage');
@@ -73,10 +110,35 @@ export function createPreview(): PreviewHandle {
   append(progressBar, progressFill);
   append(overlay, skeleton, progressBar, progressText);
 
+  // 空状態＝Source ドロップゾーン（ガイド文言＋対応形式＋サンプルリンク・§4.1 / §6.2）。
   const emptyHint = el('div', 'preview__empty');
+  emptyHint.setAttribute('role', 'button');
+  emptyHint.tabIndex = 0;
+  const emptyInner = el('div', 'preview__empty-inner');
+  const emptyText = el('div', 'preview__empty-text');
+  const emptyFormats = el('div', 'preview__empty-formats');
+  const sampleLink = el('button', 'preview__sample-link');
+  sampleLink.type = 'button';
+  append(emptyInner, emptyText, emptyFormats, sampleLink);
+  append(emptyHint, emptyInner);
+
+  // 空状態はクリック（タップ）でファイル選択。サンプルリンクは伝播を止めて別動作。
+  emptyHint.addEventListener('click', (e) => {
+    if (e.target === sampleLink) return;
+    pickSource();
+  });
+  emptyHint.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    pickSource();
+  });
+  sampleLink.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onSample();
+  });
 
   append(stage, canvas, refThumb, handle, overlay, emptyHint);
-  append(root, tabs, stage);
+  append(root, tabs, stage, fileInput);
 
   const renderer: PreviewRenderer = createPreviewRenderer(canvas);
   renderer.setViewMode(viewMode);
@@ -143,6 +205,28 @@ export function createPreview(): PreviewHandle {
     tabButtons.set(def.mode, btn);
     append(tabs, btn);
   }
+  append(tabs, tabActions);
+
+  replaceBtn.addEventListener('click', pickSource);
+  removeBtn.addEventListener('click', onRemoveSource);
+
+  // ---- Source 用の常時ドラッグ＆ドロップ（投入後も差し替え可・§4.1）----
+  // クリックでのファイル選択は誤操作防止のため空状態限定（emptyHint のみ）。D&D は常時受け付ける。
+  stage.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    stage.classList.add('is-dragover');
+  });
+  stage.addEventListener('dragleave', (e) => {
+    // ステージ外へ出たときのみ解除（子要素間の移動では解除しない）。
+    if (e.relatedTarget instanceof Node && stage.contains(e.relatedTarget)) return;
+    stage.classList.remove('is-dragover');
+  });
+  stage.addEventListener('drop', (e) => {
+    e.preventDefault();
+    stage.classList.remove('is-dragover');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) onSourceFile(file);
+  });
 
   // ---- 比較スライダーのドラッグ ----
   const coarse = isCoarsePointer();
@@ -246,7 +330,13 @@ export function createPreview(): PreviewHandle {
       if (btn) btn.textContent = t(def.key);
     }
     handle.setAttribute('aria-label', t('compareHandleAria'));
-    emptyHint.textContent = t('previewEmpty');
+    emptyText.textContent = t('dropHint');
+    emptyFormats.textContent = t('dropFormats');
+    sampleLink.textContent = t('sampleButton');
+    emptyHint.setAttribute('aria-label', t('sourceTitle'));
+    replaceBtn.textContent = t('replaceSourceButton');
+    replaceBtn.setAttribute('aria-label', t('replaceSourceAria'));
+    removeBtn.setAttribute('aria-label', t('removeImageAria'));
     refCanvas.setAttribute('aria-label', t('referenceThumbAlt'));
     refThumb.title = t('referenceThumbAlt');
   };
@@ -260,6 +350,7 @@ export function createPreview(): PreviewHandle {
       sourceBitmap = bitmap;
       renderer.setImage(bitmap);
       emptyHint.hidden = bitmap != null;
+      tabActions.hidden = bitmap == null; // 差し替え/削除は Source 投入時のみ
       if (bitmap) {
         fitToStage();
       } else {
@@ -289,6 +380,9 @@ export function createPreview(): PreviewHandle {
     },
     setEnabled(enabled): void {
       root.classList.toggle('is-disabled', !enabled);
+    },
+    setSourceGuiding(guiding): void {
+      emptyHint.classList.toggle('is-guiding', guiding);
     },
     onBackendChange(cb): void {
       renderer.onBackendChange(cb);

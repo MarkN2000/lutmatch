@@ -23,11 +23,13 @@ export const ja = {
   guideSource: 'まず元画像を選んでください',
   guideReference: '参考画像を選んでください',
   removeImageAria: '画像を削除',
-  referenceOptionalHint: '入れると自動で色を合わせます（任意）',
+  replaceSourceButton: '差し替え',
+  replaceSourceAria: '元画像を差し替え',
+  referenceOptionalHint: '参考画像を入れると自動で色を合わせます（任意）',
   needsReferenceReason: '参考画像を入れると使えます',
 
-  // ---- 自動調整（自動マッチのモード・§4.2）----
-  modeLabel: '自動調整',
+  // ---- 色合わせ（自動マッチのモード・§4.2）----
+  modeLabel: '色合わせ',
   modeAName: 'ナチュラル',
   modeBName: '忠実',
   modeCName: 'バランス',
@@ -37,7 +39,7 @@ export const ja = {
 
   // ---- 強度・詳細調整（§4.4）----
   strengthLabel: '強度',
-  strengthTooltip: '自動調整の結果と元の色のブレンド率。手動調整には影響しません。',
+  strengthTooltip: '色合わせの結果と元の色のブレンド率。手動調整には影響しません。',
   detailsTitle: '詳細調整',
   smoothingLabel: 'スムージング',
   smoothingTooltip: 'LUT を 3D 平滑化してバンディング・色飛びを抑えます。',
@@ -75,7 +77,6 @@ export const ja = {
   tabResult: '適用後',
   tabCompare: '比較',
   referenceThumbAlt: '参考画像（目標）',
-  previewEmpty: '画像を選ぶとここにプレビューが表示されます',
   computing: '計算中…',
   compareHandleAria: '比較スライダー（左右キーで移動）',
 
